@@ -138,6 +138,52 @@ describe('admin.setMemberRole', () => {
 	});
 });
 
+describe('admin.updateMember', () => {
+	test('staff edit a member name and ministry within their church', async () => {
+		const t = setup();
+		const church = await seedChurch(t, 'First Church');
+		const staff = await seedUser(t, 'staff');
+		await seedMembership(t, { userId: staff.userId, churchId: church, role: 'staff' });
+		const member = await seedUser(t, 'member');
+		const membershipId = await seedMembership(t, { userId: member.userId, churchId: church });
+
+		await staff.as.mutation(api.admin.updateMember, {
+			membershipId,
+			firstName: '  Noah ',
+			lastName: 'Ballingham',
+			ministry: 'Young Adults'
+		});
+		const user = await t.run(async (ctx) => ctx.db.get(member.userId));
+		expect(user).toMatchObject({ firstName: 'Noah', lastName: 'Ballingham' });
+		const membership = await t.run(async (ctx) => ctx.db.get(membershipId));
+		expect(membership?.ministry).toBe('Young Adults');
+
+		// Clearing ministry removes it; omitted fields stay untouched.
+		await staff.as.mutation(api.admin.updateMember, { membershipId, ministry: '  ' });
+		const cleared = await t.run(async (ctx) => ctx.db.get(membershipId));
+		expect(cleared?.ministry).toBeUndefined();
+		const untouched = await t.run(async (ctx) => ctx.db.get(member.userId));
+		expect(untouched?.firstName).toBe('Noah');
+	});
+
+	test('members and foreign staff cannot edit', async () => {
+		const t = setup();
+		const church = await seedChurch(t, 'First Church');
+		const member = await seedUser(t, 'member');
+		const membershipId = await seedMembership(t, { userId: member.userId, churchId: church });
+		await expect(
+			member.as.mutation(api.admin.updateMember, { membershipId, firstName: 'X' })
+		).rejects.toThrow('church staff access required');
+
+		const otherChurch = await seedChurch(t, 'Other Church');
+		const foreignStaff = await seedUser(t, 'foreign');
+		await seedMembership(t, { userId: foreignStaff.userId, churchId: otherChurch, role: 'admin' });
+		await expect(
+			foreignStaff.as.mutation(api.admin.updateMember, { membershipId, firstName: 'X' })
+		).rejects.toThrow('Membership not found');
+	});
+});
+
 describe('admin.removeMember', () => {
 	test('admins remove members; the user row survives', async () => {
 		const t = setup();

@@ -11,6 +11,7 @@
 	import IconHeartSearch from '@tabler/icons-svelte/icons/heart-search';
 	import IconWaveSine from '@tabler/icons-svelte/icons/wave-sine';
 	import IconLock from '@tabler/icons-svelte/icons/lock';
+	import IconPencil from '@tabler/icons-svelte/icons/pencil';
 
 	const auth = useAuth();
 	const client = useConvexClient();
@@ -194,6 +195,40 @@
 			const raw = err instanceof Error ? err.message : '';
 			roleError =
 				raw.match(/Uncaught Error: ([^\n]+?)(?: at handler.*)?$/m)?.[1] ?? 'Failed to update role';
+		} finally {
+			busy = null;
+		}
+	}
+
+	// Inline member editing (name + ministry): draft exists only while a row
+	// is in edit mode; server state stays the source of truth.
+	let editingMemberId = $state<Id<'memberships'> | null>(null);
+	let memberDraft = $state({ firstName: '', lastName: '', ministry: '' });
+
+	function startMemberEdit(member: (typeof members)[number]) {
+		editingMemberId = member.membershipId;
+		memberDraft = {
+			firstName: member.firstName,
+			lastName: member.lastName,
+			ministry: member.ministry ?? ''
+		};
+	}
+
+	async function saveMemberEdit() {
+		if (!editingMemberId) return;
+		busy = `edit-${editingMemberId}`;
+		roleError = null;
+		try {
+			await client.mutation(api.admin.updateMember, {
+				membershipId: editingMemberId,
+				...memberDraft
+			});
+			editingMemberId = null;
+		} catch (err) {
+			const raw = err instanceof Error ? err.message : '';
+			roleError =
+				raw.match(/Uncaught Error: ([^\n]+?)(?: at handler.*)?$/m)?.[1] ??
+				'Failed to update member';
 		} finally {
 			busy = null;
 		}
@@ -719,125 +754,171 @@
 				</thead>
 				<tbody>
 					{#each visibleMembers as member (member.membershipId)}
-						<tr>
-							<td>
-								<div class="flex items-center gap-3">
-									<div class="avatar">
-										{#if member.imageUrl}
-											<div class="size-9 rounded-full">
-												<img src={member.imageUrl} alt="" />
-											</div>
-										{:else}
-											<div
-												class="flex size-9 items-center justify-center rounded-full bg-secondary text-secondary-content"
+						{#if editingMemberId === member.membershipId}
+							<tr class="bg-base-200/50">
+								<td colspan="9">
+									<div class="flex flex-wrap items-center gap-2 py-1">
+										<input
+											class="input w-36 input-sm"
+											placeholder="First name"
+											bind:value={memberDraft.firstName}
+										/>
+										<input
+											class="input w-36 input-sm"
+											placeholder="Last name"
+											bind:value={memberDraft.lastName}
+										/>
+										<input
+											class="input w-44 input-sm"
+											placeholder="Ministry (optional)"
+											bind:value={memberDraft.ministry}
+										/>
+										<span class="text-xs text-base-content/50">
+											{member.email} — email is their sign-in and can't be edited
+										</span>
+										<div class="ml-auto flex gap-2">
+											<button
+												class="btn btn-primary btn-xs"
+												disabled={busy === `edit-${member.membershipId}`}
+												onclick={saveMemberEdit}
 											>
-												<span class="text-sm font-semibold"
-													>{(member.firstName[0] ?? '') + (member.lastName[0] ?? '')}</span
+												Save
+											</button>
+											<button class="btn btn-ghost btn-xs" onclick={() => (editingMemberId = null)}>
+												Cancel
+											</button>
+										</div>
+									</div>
+								</td>
+							</tr>
+						{:else}
+							<tr>
+								<td>
+									<div class="flex items-center gap-3">
+										<div class="avatar">
+											{#if member.imageUrl}
+												<div class="size-9 rounded-full">
+													<img src={member.imageUrl} alt="" />
+												</div>
+											{:else}
+												<div
+													class="flex size-9 items-center justify-center rounded-full bg-secondary text-secondary-content"
 												>
-											</div>
+													<span class="text-sm font-semibold"
+														>{(member.firstName[0] ?? '') + (member.lastName[0] ?? '')}</span
+													>
+												</div>
+											{/if}
+										</div>
+										<div>
+											<p class="font-semibold">
+												<a
+													href={resolve('/admin/journey/[userId]', { userId: member.userId })}
+													class="hover:text-primary"
+												>
+													{member.firstName}
+													{member.lastName}
+												</a>
+												{#if member.isNew}
+													<span class="ml-1 badge badge-sm badge-info">New</span>
+												{/if}
+												{#if member.isDrifting}
+													<span class="ml-1 badge badge-sm badge-error">Drifting</span>
+												{/if}
+											</p>
+											<p class="text-sm text-base-content/60">{member.email}</p>
+										</div>
+									</div>
+								</td>
+								<td>
+									{#if isChurchAdmin && member.userId !== myChurch.membership.userId}
+										<select
+											class="select w-28 select-sm"
+											value={member.role}
+											disabled={busy === `role-${member.membershipId}`}
+											onchange={(e) =>
+												changeRole(
+													member.membershipId,
+													e.currentTarget.value as 'member' | 'leader' | 'staff' | 'admin'
+												)}
+										>
+											<option value="member">member</option>
+											<option value="leader">leader</option>
+											<option value="staff">staff</option>
+											<option value="admin">admin</option>
+										</select>
+									{:else}
+										<span class="badge {roleBadge[member.role]}">{member.role}</span>
+									{/if}
+								</td>
+								<td>
+									<span
+										class="badge {member.status === 'verified' ? 'badge-success' : 'badge-warning'}"
+									>
+										{member.status}
+									</span>
+								</td>
+								<td class="text-center">{member.connectionCount}</td>
+								<td class="text-center">{member.groupCount}</td>
+								<td>
+									{#if member.hasProfile && member.lookingFor.length > 0}
+										<div class="flex max-w-48 flex-wrap gap-1">
+											{#each member.lookingFor as item (item)}
+												<span class="badge badge-ghost badge-sm"
+													>{lookingForLabels[item] ?? item}</span
+												>
+											{/each}
+										</div>
+									{:else if !member.hasProfile}
+										<span class="text-sm text-base-content/50">No profile yet</span>
+									{/if}
+								</td>
+								<td class="text-sm text-base-content/60">
+									{member.lastCheckInAt ? formatDate(member.lastCheckInAt) : '—'}
+								</td>
+								<td class="text-sm text-base-content/60">{formatDate(member.joinedAt)}</td>
+								<td>
+									<div class="flex justify-end gap-2">
+										<button
+											class="btn btn-ghost btn-xs"
+											aria-label="Edit member"
+											onclick={() => startMemberEdit(member)}
+										>
+											<IconPencil size={14} />
+										</button>
+										{#if member.status !== 'verified'}
+											<button
+												class="btn btn-primary btn-xs"
+												disabled={busy === member.membershipId}
+												onclick={() => verify(member.membershipId)}
+											>
+												Verify
+											</button>
+										{/if}
+										{#if !openFollowUpSubjects.has(member.userId)}
+											<button
+												class="btn btn-outline btn-xs"
+												disabled={busy === `fu-${member.userId}`}
+												onclick={() => createFollowUp(member)}
+											>
+												Follow up
+											</button>
+										{:else}
+											<span class="badge badge-ghost badge-sm">Follow-up open</span>
+										{/if}
+										{#if isChurchAdmin && member.userId !== myChurch.membership.userId}
+											<button
+												class="btn btn-ghost text-error btn-xs"
+												disabled={busy === `rm-${member.membershipId}`}
+												onclick={() => removeMember(member)}
+											>
+												Remove
+											</button>
 										{/if}
 									</div>
-									<div>
-										<p class="font-semibold">
-											<a
-												href={resolve('/admin/journey/[userId]', { userId: member.userId })}
-												class="hover:text-primary"
-											>
-												{member.firstName}
-												{member.lastName}
-											</a>
-											{#if member.isNew}
-												<span class="ml-1 badge badge-sm badge-info">New</span>
-											{/if}
-											{#if member.isDrifting}
-												<span class="ml-1 badge badge-sm badge-error">Drifting</span>
-											{/if}
-										</p>
-										<p class="text-sm text-base-content/60">{member.email}</p>
-									</div>
-								</div>
-							</td>
-							<td>
-								{#if isChurchAdmin && member.userId !== myChurch.membership.userId}
-									<select
-										class="select w-28 select-sm"
-										value={member.role}
-										disabled={busy === `role-${member.membershipId}`}
-										onchange={(e) =>
-											changeRole(
-												member.membershipId,
-												e.currentTarget.value as 'member' | 'leader' | 'staff' | 'admin'
-											)}
-									>
-										<option value="member">member</option>
-										<option value="leader">leader</option>
-										<option value="staff">staff</option>
-										<option value="admin">admin</option>
-									</select>
-								{:else}
-									<span class="badge {roleBadge[member.role]}">{member.role}</span>
-								{/if}
-							</td>
-							<td>
-								<span
-									class="badge {member.status === 'verified' ? 'badge-success' : 'badge-warning'}"
-								>
-									{member.status}
-								</span>
-							</td>
-							<td class="text-center">{member.connectionCount}</td>
-							<td class="text-center">{member.groupCount}</td>
-							<td>
-								{#if member.hasProfile && member.lookingFor.length > 0}
-									<div class="flex max-w-48 flex-wrap gap-1">
-										{#each member.lookingFor as item (item)}
-											<span class="badge badge-ghost badge-sm"
-												>{lookingForLabels[item] ?? item}</span
-											>
-										{/each}
-									</div>
-								{:else if !member.hasProfile}
-									<span class="text-sm text-base-content/50">No profile yet</span>
-								{/if}
-							</td>
-							<td class="text-sm text-base-content/60">
-								{member.lastCheckInAt ? formatDate(member.lastCheckInAt) : '—'}
-							</td>
-							<td class="text-sm text-base-content/60">{formatDate(member.joinedAt)}</td>
-							<td>
-								<div class="flex justify-end gap-2">
-									{#if member.status !== 'verified'}
-										<button
-											class="btn btn-primary btn-xs"
-											disabled={busy === member.membershipId}
-											onclick={() => verify(member.membershipId)}
-										>
-											Verify
-										</button>
-									{/if}
-									{#if !openFollowUpSubjects.has(member.userId)}
-										<button
-											class="btn btn-outline btn-xs"
-											disabled={busy === `fu-${member.userId}`}
-											onclick={() => createFollowUp(member)}
-										>
-											Follow up
-										</button>
-									{:else}
-										<span class="badge badge-ghost badge-sm">Follow-up open</span>
-									{/if}
-									{#if isChurchAdmin && member.userId !== myChurch.membership.userId}
-										<button
-											class="btn btn-ghost text-error btn-xs"
-											disabled={busy === `rm-${member.membershipId}`}
-											onclick={() => removeMember(member)}
-										>
-											Remove
-										</button>
-									{/if}
-								</div>
-							</td>
-						</tr>
+								</td>
+							</tr>
+						{/if}
 					{:else}
 						<tr>
 							<td colspan="9" class="py-8 text-center text-base-content/60">

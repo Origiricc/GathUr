@@ -98,6 +98,7 @@ export async function computeChurchHealth(
 			role: membership.role,
 			status: membership.status,
 			source: membership.source,
+			ministry: membership.ministry ?? null,
 			joinedAt: membership.joinedAt,
 			firstName: user.firstName,
 			lastName: user.lastName,

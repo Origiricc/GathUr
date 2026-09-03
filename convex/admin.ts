@@ -494,6 +494,44 @@ export const setMemberRole = mutation({
 });
 
 /**
+ * Edit a member's details from the triage table. Staff-level (it's
+ * clerical care work, like verifying): the display name lives on the
+ * users row — Clerk only writes names at account creation, so a staff
+ * correction sticks — and ministry lives on the membership. Email stays
+ * Clerk-owned identity and is deliberately not editable.
+ */
+export const updateMember = mutation({
+	args: {
+		membershipId: v.id('memberships'),
+		firstName: v.optional(v.string()),
+		lastName: v.optional(v.string()),
+		ministry: v.optional(v.string())
+	},
+	handler: async (ctx, { membershipId, firstName, lastName, ministry }) => {
+		const staff = await requireChurchStaff(ctx);
+		if (!staff) throw new Error('Unauthorized');
+		const target = await ctx.db.get(membershipId);
+		if (!target || target.churchId !== staff.membership.churchId) {
+			throw new Error('Membership not found');
+		}
+
+		if (firstName !== undefined || lastName !== undefined) {
+			const user = await ctx.db.get(target.userId);
+			if (!user) throw new Error('User not found');
+			await ctx.db.patch(target.userId, {
+				...(firstName !== undefined ? { firstName: firstName.trim() } : {}),
+				...(lastName !== undefined ? { lastName: lastName.trim() } : {}),
+				updatedAt: Date.now()
+			});
+		}
+		if (ministry !== undefined) {
+			await ctx.db.patch(membershipId, { ministry: ministry.trim() || undefined });
+		}
+		return membershipId;
+	}
+});
+
+/**
  * Remove a member from the church. Admin-only; you can't remove yourself,
  * so (with setMemberRole's guards) an admin always remains. The user row
  * survives — only the membership goes.
