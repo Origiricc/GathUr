@@ -451,6 +451,73 @@ export const importMembers = mutation({
 	}
 });
 
+/**
+ * Change a member's church role — the in-app role CRUD (ported from OCC's
+ * Timii workspace-roles model, plus the self-change guard it lacked).
+ * Admin-only, and you can't change your own role — together those two
+ * guards make "no admins left" structurally impossible: every demotion is
+ * performed by an admin who isn't the target, so an admin always remains.
+ */
+export const setMemberRole = mutation({
+	args: {
+		membershipId: v.id('memberships'),
+		role: v.union(v.literal('member'), v.literal('leader'), v.literal('staff'), v.literal('admin'))
+	},
+	handler: async (ctx, { membershipId, role }) => {
+		const staff = await requireChurchStaff(ctx);
+		if (!staff) throw new Error('Unauthorized');
+		if (staff.membership.role !== 'admin') {
+			throw new Error('Unauthorized: church admin access required');
+		}
+
+		const target = await ctx.db.get(membershipId);
+		if (!target || target.churchId !== staff.membership.churchId) {
+			throw new Error('Membership not found');
+		}
+		if (target.userId === staff.user._id) {
+			throw new Error("You can't change your own role");
+		}
+		if (target.role === role) return membershipId;
+
+		// A role grant is an act of trust — it verifies a pending membership.
+		await ctx.db.patch(membershipId, { role, status: 'verified' });
+
+		const church = await ctx.db.get(staff.membership.churchId);
+		await notify(ctx, {
+			recipientId: target.userId,
+			type: 'role-changed',
+			title: `You're now ${role === 'admin' ? 'an admin' : `a ${role}`} at ${church?.name ?? 'your church'}`,
+			actionUrl: role === 'admin' || role === 'staff' ? '/admin' : '/'
+		});
+		return membershipId;
+	}
+});
+
+/**
+ * Remove a member from the church. Admin-only; you can't remove yourself,
+ * so (with setMemberRole's guards) an admin always remains. The user row
+ * survives — only the membership goes.
+ */
+export const removeMember = mutation({
+	args: { membershipId: v.id('memberships') },
+	handler: async (ctx, { membershipId }) => {
+		const staff = await requireChurchStaff(ctx);
+		if (!staff) throw new Error('Unauthorized');
+		if (staff.membership.role !== 'admin') {
+			throw new Error('Unauthorized: church admin access required');
+		}
+		const target = await ctx.db.get(membershipId);
+		if (!target || target.churchId !== staff.membership.churchId) {
+			throw new Error('Membership not found');
+		}
+		if (target.userId === staff.user._id) {
+			throw new Error("You can't remove yourself");
+		}
+		await ctx.db.delete(membershipId);
+		return null;
+	}
+});
+
 /** Approve a pending membership in the caller's church. */
 export const verifyMember = mutation({
 	args: { membershipId: v.id('memberships') },

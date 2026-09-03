@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { fly } from 'svelte/transition';
+	import { cubicOut } from 'svelte/easing';
 	import { useAuth, useQuery, useConvexClient } from 'convex-svelte';
+	import { DURATION, motionDuration } from '$lib/motion';
 	import { api } from '$convex/api';
 	import IconSearch from '@tabler/icons-svelte/icons/search';
 	import IconMapPin from '@tabler/icons-svelte/icons/map-pin';
@@ -32,6 +35,25 @@
 	// Steps 2–5 run once a church exists; step 1 is "join your church".
 	let step = $state(2);
 	const totalSteps = 5;
+
+	// Step-swap motion (OCC idiom): old and new step share one grid cell and
+	// fly in the direction of travel; Back reverses it.
+	let direction = $state(1);
+	const flyIn = $derived({
+		x: 48 * direction,
+		duration: motionDuration(DURATION.slow),
+		easing: cubicOut
+	});
+	const flyOut = $derived({
+		x: -48 * direction,
+		duration: motionDuration(DURATION.normal),
+		easing: cubicOut
+	});
+
+	function goBackTo(target: number) {
+		direction = -1;
+		step = target;
+	}
 
 	// ---- Step 1: join / invites ----
 	let search = $state('');
@@ -244,6 +266,7 @@
 		saving = true;
 		try {
 			await saveProfile();
+			direction = 1;
 			step = current + 1;
 		} finally {
 			saving = false;
@@ -456,270 +479,303 @@
 			</div>
 		{/if}
 	</section>
-{:else if step === 2}
-	<!-- Step 2: What are you looking for? -->
-	<section class="mx-auto max-w-xl">
-		<div class="text-center">
-			<p class="text-sm font-medium tracking-wide text-base-content/60 uppercase">
-				Step 2 of {totalSteps}
-			</p>
-			<h1 class="mt-2 font-display text-4xl font-bold text-primary">What are you looking for?</h1>
-			<p class="mt-3 text-base-content/70">Select all that apply — you can update this anytime.</p>
-		</div>
-
-		<div class="mt-8 space-y-3">
-			{#each lookingForOptions as option (option.value)}
-				{@const selected = lookingFor.includes(option.value)}
-				<button
-					class="card w-full text-left transition-colors {selected
-						? 'bg-secondary'
-						: 'bg-base-200 hover:bg-base-300'}"
-					onclick={() => (lookingFor = toggle(lookingFor, option.value))}
-				>
-					<div class="card-body flex-row items-center justify-between p-4">
-						<div>
-							<p class="font-semibold">{option.label}</p>
-							<p class="text-sm text-base-content/60">{option.description}</p>
-						</div>
-						{#if selected}
-							<span
-								class="flex size-6 items-center justify-center rounded-full bg-primary text-primary-content"
-							>
-								<IconCheck size={16} />
-							</span>
-						{/if}
-					</div>
-				</button>
-			{/each}
-		</div>
-
-		<div class="mt-8">
-			<label class="label" for="life-stage">Life stage</label>
-			<select id="life-stage" class="select w-full" bind:value={lifeStage}>
-				<option value="">Prefer not to say</option>
-				{#each lifeStages as stage (stage.value)}
-					<option value={stage.value}>{stage.label}</option>
-				{/each}
-			</select>
-		</div>
-
-		<div class="mt-6">
-			<p class="label">Interests</p>
-			{@render chips(interestOptions, interests, (v) => (interests = toggle(interests, v)))}
-		</div>
-
-		<button
-			class="btn mt-10 w-full btn-lg btn-primary"
-			disabled={saving || lookingFor.length === 0}
-			onclick={() => continueFrom(2)}
-		>
-			{saving ? 'Saving…' : 'Continue'}
-		</button>
-	</section>
-{:else if step === 3}
-	<!-- Step 3: About you -->
-	<section class="mx-auto max-w-xl">
-		<div class="text-center">
-			<p class="text-sm font-medium tracking-wide text-base-content/60 uppercase">
-				Step 3 of {totalSteps}
-			</p>
-			<h1 class="mt-2 font-display text-4xl font-bold text-primary">Tell GathUr about you</h1>
-			<p class="mt-3 text-base-content/70">
-				When you're free and what you enjoy — so recommendations actually fit your life.
-			</p>
-		</div>
-
-		<div class="mt-8">
-			<p class="label">When are you usually available?</p>
-			<div class="mt-2 flex flex-wrap gap-2">
-				{#each availabilityOptions as option (option.value)}
-					<button
-						class="badge cursor-pointer badge-lg {availability.includes(option.value)
-							? 'badge-primary'
-							: 'badge-ghost'}"
-						onclick={() => (availability = toggle(availability, option.value))}
-					>
-						{option.label}
-					</button>
-				{/each}
-			</div>
-		</div>
-
-		<div class="mt-6">
-			<p class="label">What kinds of hangs sound good?</p>
-			{@render chips(
-				activityOptions,
-				preferredActivities,
-				(v) => (preferredActivities = toggle(preferredActivities, v))
-			)}
-		</div>
-
-		<div class="mt-6">
-			<p class="label">Any ministries you're curious about?</p>
-			{@render chips(ministryOptions, ministries, (v) => (ministries = toggle(ministries, v)))}
-		</div>
-
-		<div class="mt-10 flex gap-3">
-			<button class="btn btn-ghost" onclick={() => (step = 2)}>Back</button>
-			<button
-				class="btn flex-1 btn-lg btn-primary"
-				disabled={saving}
-				onclick={() => continueFrom(3)}
-			>
-				{saving ? 'Saving…' : 'Continue'}
-			</button>
-		</div>
-		<p class="mt-3 text-center text-sm text-base-content/60">All of this is optional.</p>
-	</section>
-{:else if step === 4}
-	<!-- Step 4: Privacy -->
-	<section class="mx-auto max-w-xl">
-		<div class="text-center">
-			<p class="text-sm font-medium tracking-wide text-base-content/60 uppercase">
-				Step 4 of {totalSteps}
-			</p>
-			<h1 class="mt-2 font-display text-4xl font-bold text-primary">Your privacy, your call</h1>
-			<p class="mt-3 text-base-content/70">You control who sees you and how.</p>
-		</div>
-
-		<div class="mt-8 space-y-3">
-			{#each privacyOptions as option (option.value)}
-				{@const selected = visibility === option.value}
-				<button
-					class="card w-full text-left transition-colors {selected
-						? 'bg-secondary'
-						: 'bg-base-200 hover:bg-base-300'}"
-					onclick={() => (visibility = option.value)}
-				>
-					<div class="card-body flex-row items-center justify-between p-4">
-						<div>
-							<p class="font-semibold">{option.label}</p>
-							<p class="text-sm text-base-content/60">{option.description}</p>
-						</div>
-						{#if selected}
-							<span
-								class="flex size-6 items-center justify-center rounded-full bg-primary text-primary-content"
-							>
-								<IconCheck size={16} />
-							</span>
-						{/if}
-					</div>
-				</button>
-			{/each}
-		</div>
-
-		<div class="card mt-6 bg-base-200">
-			<div class="card-body gap-4 p-4">
-				<label class="flex cursor-pointer items-center justify-between gap-3">
-					<span>
-						<span class="font-medium">Include me in recommendations</span>
-						<span class="block text-sm text-base-content/60">
-							Let GathUr suggest you as a person to meet.
-						</span>
-					</span>
-					<input type="checkbox" class="toggle toggle-primary" bind:checked={recommendable} />
-				</label>
-				<label class="flex cursor-pointer items-center justify-between gap-3">
-					<span>
-						<span class="font-medium">Show my contact info</span>
-						<span class="block text-sm text-base-content/60">
-							Display your email in the directory.
-						</span>
-					</span>
-					<input type="checkbox" class="toggle toggle-primary" bind:checked={showContact} />
-				</label>
-			</div>
-		</div>
-
-		<div class="mt-10 flex gap-3">
-			<button class="btn btn-ghost" onclick={() => (step = 3)}>Back</button>
-			<button
-				class="btn flex-1 btn-lg btn-primary"
-				disabled={saving}
-				onclick={() => continueFrom(4)}
-			>
-				{saving ? 'Saving…' : 'Continue'}
-			</button>
-		</div>
-	</section>
 {:else}
-	<!-- Step 5: First recommendations -->
-	<section class="mx-auto max-w-xl">
-		<div class="text-center">
-			<p class="text-sm font-medium tracking-wide text-base-content/60 uppercase">
-				Step 5 of {totalSteps}
-			</p>
-			<h1 class="mt-2 font-display text-4xl font-bold text-primary">Your first connections</h1>
-			<p class="mt-3 text-base-content/70">Here's where we'd start — every suggestion says why.</p>
-		</div>
+	<!-- Steps 2–5 swap in place: old and new share one grid cell so the
+	     transition never jumps layout (in: and out: run simultaneously). -->
+	<div class="grid overflow-x-clip">
+		{#key step}
+			<div class="[grid-area:1/1]" in:fly={flyIn} out:fly={flyOut}>
+				{#if step === 2}
+					<!-- Step 2: What are you looking for? -->
+					<section class="mx-auto max-w-xl">
+						<div class="text-center">
+							<p class="text-sm font-medium tracking-wide text-base-content/60 uppercase">
+								Step 2 of {totalSteps}
+							</p>
+							<h1 class="mt-2 font-display text-4xl font-bold text-primary">
+								What are you looking for?
+							</h1>
+							<p class="mt-3 text-base-content/70">
+								Select all that apply — you can update this anytime.
+							</p>
+						</div>
 
-		{#if !isVerified}
-			<div class="mt-8 alert bg-secondary text-secondary-content">
-				<span>
-					Your membership is waiting on your church team to verify you. Recommendations unlock the
-					moment they do — everything else is ready.
-				</span>
-			</div>
-		{:else if !recs}
-			<div class="mt-8 flex justify-center">
-				<span class="loading loading-spinner text-primary"></span>
-			</div>
-		{:else}
-			<div class="mt-8 space-y-3">
-				{#each recs.people as person (person.userId)}
-					<div class="card bg-base-200">
-						<div class="card-body flex-row items-center justify-between p-4">
-							<div>
-								<p class="flex items-center gap-1 font-semibold">
-									<IconSparkles size={16} class="text-primary" />
-									Meet {person.name}
-								</p>
-								<p class="text-sm text-base-content/60">{person.reasons.join(' · ')}</p>
-							</div>
-							{#if connectedTo.has(person.userId)}
-								<span class="badge badge-success">Request sent</span>
-							{:else}
+						<div class="mt-8 space-y-3">
+							{#each lookingForOptions as option (option.value)}
+								{@const selected = lookingFor.includes(option.value)}
 								<button
-									class="btn btn-primary btn-sm"
-									disabled={connectBusy === person.userId}
-									onclick={() => connect(person.userId)}
+									class="card w-full text-left transition-colors {selected
+										? 'bg-secondary'
+										: 'bg-base-200 hover:bg-base-300'}"
+									onclick={() => (lookingFor = toggle(lookingFor, option.value))}
 								>
-									Connect
+									<div class="card-body flex-row items-center justify-between p-4">
+										<div>
+											<p class="font-semibold">{option.label}</p>
+											<p class="text-sm text-base-content/60">{option.description}</p>
+										</div>
+										{#if selected}
+											<span
+												class="flex size-6 items-center justify-center rounded-full bg-primary text-primary-content"
+											>
+												<IconCheck size={16} />
+											</span>
+										{/if}
+									</div>
 								</button>
-							{/if}
+							{/each}
 						</div>
-					</div>
-				{/each}
-				{#each recs.groups.slice(0, 1) as group (group.groupId)}
-					<a
-						href={resolve('/groups/[id]', { id: group.groupId })}
-						class="card bg-base-200 transition-colors hover:bg-base-300"
-					>
-						<div class="card-body p-4">
-							<p class="font-semibold">Join {group.name}</p>
-							<p class="text-sm text-base-content/60">{group.reasons.join(' · ')}</p>
+
+						<div class="mt-8">
+							<label class="label" for="life-stage">Life stage</label>
+							<select id="life-stage" class="select w-full" bind:value={lifeStage}>
+								<option value="">Prefer not to say</option>
+								{#each lifeStages as stage (stage.value)}
+									<option value={stage.value}>{stage.label}</option>
+								{/each}
+							</select>
 						</div>
-					</a>
-				{/each}
-				{#each recs.events.slice(0, 1) as event (event.eventId)}
-					<a href={resolve('/events')} class="card bg-base-200 transition-colors hover:bg-base-300">
-						<div class="card-body p-4">
-							<p class="font-semibold">Attend {event.title}</p>
-							<p class="text-sm text-base-content/60">{event.reasons.join(' · ')}</p>
+
+						<div class="mt-6">
+							<p class="label">Interests</p>
+							{@render chips(interestOptions, interests, (v) => (interests = toggle(interests, v)))}
 						</div>
-					</a>
-				{/each}
-				{#if recs.people.length === 0 && recs.groups.length === 0 && recs.events.length === 0}
-					<p class="py-6 text-center text-base-content/60">
-						Nothing to suggest just yet — as your church fills in, this comes alive.
-					</p>
+
+						<button
+							class="btn mt-10 w-full btn-lg btn-primary"
+							disabled={saving || lookingFor.length === 0}
+							onclick={() => continueFrom(2)}
+						>
+							{saving ? 'Saving…' : 'Continue'}
+						</button>
+					</section>
+				{:else if step === 3}
+					<!-- Step 3: About you -->
+					<section class="mx-auto max-w-xl">
+						<div class="text-center">
+							<p class="text-sm font-medium tracking-wide text-base-content/60 uppercase">
+								Step 3 of {totalSteps}
+							</p>
+							<h1 class="mt-2 font-display text-4xl font-bold text-primary">
+								Tell GathUr about you
+							</h1>
+							<p class="mt-3 text-base-content/70">
+								When you're free and what you enjoy — so recommendations actually fit your life.
+							</p>
+						</div>
+
+						<div class="mt-8">
+							<p class="label">When are you usually available?</p>
+							<div class="mt-2 flex flex-wrap gap-2">
+								{#each availabilityOptions as option (option.value)}
+									<button
+										class="badge cursor-pointer badge-lg {availability.includes(option.value)
+											? 'badge-primary'
+											: 'badge-ghost'}"
+										onclick={() => (availability = toggle(availability, option.value))}
+									>
+										{option.label}
+									</button>
+								{/each}
+							</div>
+						</div>
+
+						<div class="mt-6">
+							<p class="label">What kinds of hangs sound good?</p>
+							{@render chips(
+								activityOptions,
+								preferredActivities,
+								(v) => (preferredActivities = toggle(preferredActivities, v))
+							)}
+						</div>
+
+						<div class="mt-6">
+							<p class="label">Any ministries you're curious about?</p>
+							{@render chips(
+								ministryOptions,
+								ministries,
+								(v) => (ministries = toggle(ministries, v))
+							)}
+						</div>
+
+						<div class="mt-10 flex gap-3">
+							<button class="btn btn-ghost" onclick={() => goBackTo(2)}>Back</button>
+							<button
+								class="btn flex-1 btn-lg btn-primary"
+								disabled={saving}
+								onclick={() => continueFrom(3)}
+							>
+								{saving ? 'Saving…' : 'Continue'}
+							</button>
+						</div>
+						<p class="mt-3 text-center text-sm text-base-content/60">All of this is optional.</p>
+					</section>
+				{:else if step === 4}
+					<!-- Step 4: Privacy -->
+					<section class="mx-auto max-w-xl">
+						<div class="text-center">
+							<p class="text-sm font-medium tracking-wide text-base-content/60 uppercase">
+								Step 4 of {totalSteps}
+							</p>
+							<h1 class="mt-2 font-display text-4xl font-bold text-primary">
+								Your privacy, your call
+							</h1>
+							<p class="mt-3 text-base-content/70">You control who sees you and how.</p>
+						</div>
+
+						<div class="mt-8 space-y-3">
+							{#each privacyOptions as option (option.value)}
+								{@const selected = visibility === option.value}
+								<button
+									class="card w-full text-left transition-colors {selected
+										? 'bg-secondary'
+										: 'bg-base-200 hover:bg-base-300'}"
+									onclick={() => (visibility = option.value)}
+								>
+									<div class="card-body flex-row items-center justify-between p-4">
+										<div>
+											<p class="font-semibold">{option.label}</p>
+											<p class="text-sm text-base-content/60">{option.description}</p>
+										</div>
+										{#if selected}
+											<span
+												class="flex size-6 items-center justify-center rounded-full bg-primary text-primary-content"
+											>
+												<IconCheck size={16} />
+											</span>
+										{/if}
+									</div>
+								</button>
+							{/each}
+						</div>
+
+						<div class="card mt-6 bg-base-200">
+							<div class="card-body gap-4 p-4">
+								<label class="flex cursor-pointer items-center justify-between gap-3">
+									<span>
+										<span class="font-medium">Include me in recommendations</span>
+										<span class="block text-sm text-base-content/60">
+											Let GathUr suggest you as a person to meet.
+										</span>
+									</span>
+									<input
+										type="checkbox"
+										class="toggle toggle-primary"
+										bind:checked={recommendable}
+									/>
+								</label>
+								<label class="flex cursor-pointer items-center justify-between gap-3">
+									<span>
+										<span class="font-medium">Show my contact info</span>
+										<span class="block text-sm text-base-content/60">
+											Display your email in the directory.
+										</span>
+									</span>
+									<input type="checkbox" class="toggle toggle-primary" bind:checked={showContact} />
+								</label>
+							</div>
+						</div>
+
+						<div class="mt-10 flex gap-3">
+							<button class="btn btn-ghost" onclick={() => goBackTo(3)}>Back</button>
+							<button
+								class="btn flex-1 btn-lg btn-primary"
+								disabled={saving}
+								onclick={() => continueFrom(4)}
+							>
+								{saving ? 'Saving…' : 'Continue'}
+							</button>
+						</div>
+					</section>
+				{:else}
+					<!-- Step 5: First recommendations -->
+					<section class="mx-auto max-w-xl">
+						<div class="text-center">
+							<p class="text-sm font-medium tracking-wide text-base-content/60 uppercase">
+								Step 5 of {totalSteps}
+							</p>
+							<h1 class="mt-2 font-display text-4xl font-bold text-primary">
+								Your first connections
+							</h1>
+							<p class="mt-3 text-base-content/70">
+								Here's where we'd start — every suggestion says why.
+							</p>
+						</div>
+
+						{#if !isVerified}
+							<div class="mt-8 alert bg-secondary text-secondary-content">
+								<span>
+									Your membership is waiting on your church team to verify you. Recommendations
+									unlock the moment they do — everything else is ready.
+								</span>
+							</div>
+						{:else if !recs}
+							<div class="mt-8 flex justify-center">
+								<span class="loading loading-spinner text-primary"></span>
+							</div>
+						{:else}
+							<div class="mt-8 space-y-3">
+								{#each recs.people as person (person.userId)}
+									<div class="card bg-base-200">
+										<div class="card-body flex-row items-center justify-between p-4">
+											<div>
+												<p class="flex items-center gap-1 font-semibold">
+													<IconSparkles size={16} class="text-primary" />
+													Meet {person.name}
+												</p>
+												<p class="text-sm text-base-content/60">{person.reasons.join(' · ')}</p>
+											</div>
+											{#if connectedTo.has(person.userId)}
+												<span class="badge badge-success">Request sent</span>
+											{:else}
+												<button
+													class="btn btn-primary btn-sm"
+													disabled={connectBusy === person.userId}
+													onclick={() => connect(person.userId)}
+												>
+													Connect
+												</button>
+											{/if}
+										</div>
+									</div>
+								{/each}
+								{#each recs.groups.slice(0, 1) as group (group.groupId)}
+									<a
+										href={resolve('/groups/[id]', { id: group.groupId })}
+										class="card bg-base-200 transition-colors hover:bg-base-300"
+									>
+										<div class="card-body p-4">
+											<p class="font-semibold">Join {group.name}</p>
+											<p class="text-sm text-base-content/60">{group.reasons.join(' · ')}</p>
+										</div>
+									</a>
+								{/each}
+								{#each recs.events.slice(0, 1) as event (event.eventId)}
+									<a
+										href={resolve('/events')}
+										class="card bg-base-200 transition-colors hover:bg-base-300"
+									>
+										<div class="card-body p-4">
+											<p class="font-semibold">Attend {event.title}</p>
+											<p class="text-sm text-base-content/60">{event.reasons.join(' · ')}</p>
+										</div>
+									</a>
+								{/each}
+								{#if recs.people.length === 0 && recs.groups.length === 0 && recs.events.length === 0}
+									<p class="py-6 text-center text-base-content/60">
+										Nothing to suggest just yet — as your church fills in, this comes alive.
+									</p>
+								{/if}
+							</div>
+						{/if}
+
+						<div class="mt-10 flex gap-3">
+							<button class="btn btn-ghost" onclick={() => goBackTo(4)}>Back</button>
+							<a href={resolve('/')} class="btn flex-1 btn-lg btn-primary">Take me home</a>
+						</div>
+					</section>
 				{/if}
 			</div>
-		{/if}
-
-		<div class="mt-10 flex gap-3">
-			<button class="btn btn-ghost" onclick={() => (step = 4)}>Back</button>
-			<a href={resolve('/')} class="btn flex-1 btn-lg btn-primary">Take me home</a>
-		</div>
-	</section>
+		{/key}
+	</div>
 {/if}

@@ -1,0 +1,27 @@
+/* @occ/motion — companion stylesheet for `use:reveal` (see reveal.ts).
+	 Import once per app, e.g. in app.css / layout.css:
+		 @import '@occ/motion/reveal.css';
+
+	 Elements marked `data-occ-reveal` in markup are hidden from the FIRST paint
+	 (no flash of visible-then-hidden when JS arrives) — but only when scripting
+	 is enabled and the user has not asked for reduced motion. `use:reveal`
+	 animates them in and sets `data-occ-revealed`, which hands the final state
+	 back to this sheet. */
+@media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
+	[data-occ-reveal]:not([data-occ-revealed]) {
+		opacity: 0;
+	}
+
+	/* Safety net: if the JS bundle never runs (blocked, failed, ancient device),
+		 show everything after 2.5 s. reveal.ts stamps <html data-occ-motion> the
+		 moment it loads, which switches this off so reveals stay observer-driven. */
+	html:not([data-occ-motion]) [data-occ-reveal]:not([data-occ-revealed]) {
+		animation: occ-reveal-fallback 0s 2.5s forwards;
+	}
+}
+
+@keyframes occ-reveal-fallback {
+	to {
+		opacity: 1;
+	}
+}

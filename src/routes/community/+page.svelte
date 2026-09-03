@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { api } from '$convex/api';
 	import type { Id } from '$convex/dataModel';
+	import { DURATION, fadeUp, occFlip } from '$lib/motion';
 	import IconMessageCircle from '@tabler/icons-svelte/icons/message-circle';
 	import IconHandStop from '@tabler/icons-svelte/icons/hand-stop';
 	import IconSpeakerphone from '@tabler/icons-svelte/icons/speakerphone';
@@ -156,165 +157,181 @@
 			</button>
 		</div>
 
-		{#if tab === 'posts'}
-			<div class="card mt-6 bg-base-200">
-				<div class="card-body p-4">
-					<textarea
-						class="textarea w-full"
-						rows="2"
-						placeholder="Who's grabbing coffee after second service?"
-						bind:value={postBody}></textarea>
-					<div class="card-actions justify-end">
-						<button
-							class="btn btn-primary btn-sm"
-							disabled={busy === 'post' || !postBody.trim()}
-							onclick={submitPost}
-						>
-							Post
-						</button>
-					</div>
-				</div>
-			</div>
-			<div class="mt-4 space-y-3">
-				{#each posts as post (post._id)}
-					<div class="card bg-base-200">
+		{#key tab}
+			<div in:fadeUp={{ duration: DURATION.normal }}>
+				{#if tab === 'posts'}
+					<div class="card mt-6 bg-base-200">
 						<div class="card-body p-4">
-							<div class="flex items-start justify-between gap-2">
-								<div class="flex items-center gap-2">
-									{#if post.authorImageUrl}
-										<img src={post.authorImageUrl} alt="" class="size-8 rounded-full" />
-									{:else}
-										<div
-											class="flex size-8 items-center justify-center rounded-full bg-secondary text-secondary-content"
-										>
-											<span class="text-xs font-semibold">{post.authorName[0] ?? '?'}</span>
-										</div>
-									{/if}
-									<div>
-										<p class="text-sm font-semibold">{post.authorName}</p>
-										<p class="text-xs text-base-content/50">{formatDate(post.createdAt)}</p>
-									</div>
-								</div>
-								{#if post.isMine || isStaff}
-									<button
-										class="btn btn-ghost btn-xs"
-										disabled={busy === post._id}
-										onclick={() => removePost(post._id)}
-									>
-										Delete
-									</button>
-								{/if}
+							<textarea
+								class="textarea w-full"
+								rows="2"
+								placeholder="Who's grabbing coffee after second service?"
+								bind:value={postBody}></textarea>
+							<div class="card-actions justify-end">
+								<button
+									class="btn btn-primary btn-sm"
+									disabled={busy === 'post' || !postBody.trim()}
+									onclick={submitPost}
+								>
+									Post
+								</button>
 							</div>
-							<p class="mt-2 whitespace-pre-wrap">{post.body}</p>
 						</div>
 					</div>
-				{:else}
-					<p class="py-8 text-center text-base-content/60">
-						{postsQuery.isLoading ? 'Loading…' : 'No posts yet — start the conversation.'}
-					</p>
-				{/each}
-			</div>
-		{:else if tab === 'prayer'}
-			<div class="card mt-6 bg-base-200">
-				<div class="card-body p-4">
-					<textarea
-						class="textarea w-full"
-						rows="2"
-						placeholder="How can your church pray for you?"
-						bind:value={prayerBody}></textarea>
-					<div class="card-actions items-center justify-between">
-						<label class="label cursor-pointer gap-2 text-sm">
-							<input type="checkbox" class="checkbox checkbox-sm" bind:checked={prayerAnonymous} />
-							Share anonymously
-						</label>
-						<button
-							class="btn btn-primary btn-sm"
-							disabled={busy === 'prayer' || !prayerBody.trim()}
-							onclick={submitPrayer}
-						>
-							Share
-						</button>
-					</div>
-				</div>
-			</div>
-			<div class="mt-4 space-y-3">
-				{#each prayers as prayer (prayer._id)}
-					<div class="card bg-base-200">
-						<div class="card-body p-4">
-							<div class="flex items-start justify-between gap-2">
-								<div>
-									<p class="text-sm font-semibold">
-										{prayer.authorName ?? 'Anonymous'}
-										{#if prayer.isAnswered}
-											<span class="ml-1 badge badge-sm badge-success">Answered</span>
-										{/if}
-									</p>
-									<p class="text-xs text-base-content/50">{formatDate(prayer.createdAt)}</p>
-								</div>
-								{#if prayer.isMine && !prayer.isAnswered}
-									<button
-										class="btn btn-ghost btn-xs"
-										disabled={busy === prayer._id}
-										onclick={() => markAnswered(prayer._id)}
-									>
-										Mark answered
-									</button>
-								{/if}
-							</div>
-							<p class="mt-2 whitespace-pre-wrap">{prayer.body}</p>
-						</div>
-					</div>
-				{:else}
-					<p class="py-8 text-center text-base-content/60">
-						{prayerQuery.isLoading ? 'Loading…' : 'No prayer requests yet.'}
-					</p>
-				{/each}
-			</div>
-		{:else}
-			{#if isStaff}
-				<div class="card mt-6 bg-base-200">
-					<div class="card-body space-y-2 p-4">
-						<input
-							class="input w-full"
-							placeholder="Announcement title"
-							bind:value={announcementTitle}
-						/>
-						<textarea
-							class="textarea w-full"
-							rows="3"
-							placeholder="What does your church need to know?"
-							bind:value={announcementBody}></textarea>
-						<div class="card-actions justify-end">
-							<button
-								class="btn btn-primary btn-sm"
-								disabled={busy === 'announcement' ||
-									!announcementTitle.trim() ||
-									!announcementBody.trim()}
-								onclick={submitAnnouncement}
+					<div class="mt-4 space-y-3">
+						{#each posts as post (post._id)}
+							<div
+								class="card bg-base-200"
+								animate:occFlip
+								out:fadeUp={{ duration: DURATION.fast, distance: 8 }}
 							>
-								Publish
-							</button>
+								<div class="card-body p-4">
+									<div class="flex items-start justify-between gap-2">
+										<div class="flex items-center gap-2">
+											{#if post.authorImageUrl}
+												<img src={post.authorImageUrl} alt="" class="size-8 rounded-full" />
+											{:else}
+												<div
+													class="flex size-8 items-center justify-center rounded-full bg-secondary text-secondary-content"
+												>
+													<span class="text-xs font-semibold">{post.authorName[0] ?? '?'}</span>
+												</div>
+											{/if}
+											<div>
+												<p class="text-sm font-semibold">{post.authorName}</p>
+												<p class="text-xs text-base-content/50">{formatDate(post.createdAt)}</p>
+											</div>
+										</div>
+										{#if post.isMine || isStaff}
+											<button
+												class="btn btn-ghost btn-xs"
+												disabled={busy === post._id}
+												onclick={() => removePost(post._id)}
+											>
+												Delete
+											</button>
+										{/if}
+									</div>
+									<p class="mt-2 whitespace-pre-wrap">{post.body}</p>
+								</div>
+							</div>
+						{:else}
+							<p class="py-8 text-center text-base-content/60">
+								{postsQuery.isLoading ? 'Loading…' : 'No posts yet — start the conversation.'}
+							</p>
+						{/each}
+					</div>
+				{:else if tab === 'prayer'}
+					<div class="card mt-6 bg-base-200">
+						<div class="card-body p-4">
+							<textarea
+								class="textarea w-full"
+								rows="2"
+								placeholder="How can your church pray for you?"
+								bind:value={prayerBody}></textarea>
+							<div class="card-actions items-center justify-between">
+								<label class="label cursor-pointer gap-2 text-sm">
+									<input
+										type="checkbox"
+										class="checkbox checkbox-sm"
+										bind:checked={prayerAnonymous}
+									/>
+									Share anonymously
+								</label>
+								<button
+									class="btn btn-primary btn-sm"
+									disabled={busy === 'prayer' || !prayerBody.trim()}
+									onclick={submitPrayer}
+								>
+									Share
+								</button>
+							</div>
 						</div>
 					</div>
-				</div>
-			{/if}
-			<div class="mt-4 space-y-3">
-				{#each announcements as announcement (announcement._id)}
-					<div class="card bg-base-200">
-						<div class="card-body p-4">
-							<p class="font-display text-lg font-bold text-primary">{announcement.title}</p>
-							<p class="text-xs text-base-content/50">
-								{announcement.authorName} · {formatDate(announcement.createdAt)}
+					<div class="mt-4 space-y-3">
+						{#each prayers as prayer (prayer._id)}
+							<div
+								class="card bg-base-200"
+								animate:occFlip
+								out:fadeUp={{ duration: DURATION.fast, distance: 8 }}
+							>
+								<div class="card-body p-4">
+									<div class="flex items-start justify-between gap-2">
+										<div>
+											<p class="text-sm font-semibold">
+												{prayer.authorName ?? 'Anonymous'}
+												{#if prayer.isAnswered}
+													<span class="ml-1 badge badge-sm badge-success">Answered</span>
+												{/if}
+											</p>
+											<p class="text-xs text-base-content/50">{formatDate(prayer.createdAt)}</p>
+										</div>
+										{#if prayer.isMine && !prayer.isAnswered}
+											<button
+												class="btn btn-ghost btn-xs"
+												disabled={busy === prayer._id}
+												onclick={() => markAnswered(prayer._id)}
+											>
+												Mark answered
+											</button>
+										{/if}
+									</div>
+									<p class="mt-2 whitespace-pre-wrap">{prayer.body}</p>
+								</div>
+							</div>
+						{:else}
+							<p class="py-8 text-center text-base-content/60">
+								{prayerQuery.isLoading ? 'Loading…' : 'No prayer requests yet.'}
 							</p>
-							<p class="mt-2 whitespace-pre-wrap">{announcement.body}</p>
-						</div>
+						{/each}
 					</div>
 				{:else}
-					<p class="py-8 text-center text-base-content/60">
-						{announcementsQuery.isLoading ? 'Loading…' : 'No announcements yet.'}
-					</p>
-				{/each}
+					{#if isStaff}
+						<div class="card mt-6 bg-base-200">
+							<div class="card-body space-y-2 p-4">
+								<input
+									class="input w-full"
+									placeholder="Announcement title"
+									bind:value={announcementTitle}
+								/>
+								<textarea
+									class="textarea w-full"
+									rows="3"
+									placeholder="What does your church need to know?"
+									bind:value={announcementBody}></textarea>
+								<div class="card-actions justify-end">
+									<button
+										class="btn btn-primary btn-sm"
+										disabled={busy === 'announcement' ||
+											!announcementTitle.trim() ||
+											!announcementBody.trim()}
+										onclick={submitAnnouncement}
+									>
+										Publish
+									</button>
+								</div>
+							</div>
+						</div>
+					{/if}
+					<div class="mt-4 space-y-3">
+						{#each announcements as announcement (announcement._id)}
+							<div class="card bg-base-200">
+								<div class="card-body p-4">
+									<p class="font-display text-lg font-bold text-primary">{announcement.title}</p>
+									<p class="text-xs text-base-content/50">
+										{announcement.authorName} · {formatDate(announcement.createdAt)}
+									</p>
+									<p class="mt-2 whitespace-pre-wrap">{announcement.body}</p>
+								</div>
+							</div>
+						{:else}
+							<p class="py-8 text-center text-base-content/60">
+								{announcementsQuery.isLoading ? 'Loading…' : 'No announcements yet.'}
+							</p>
+						{/each}
+					</div>
+				{/if}
 			</div>
-		{/if}
+		{/key}
 	</section>
 {/if}

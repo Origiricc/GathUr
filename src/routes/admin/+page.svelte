@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { api } from '$convex/api';
 	import TrendChart from '$lib/components/TrendChart.svelte';
+	import { DURATION, fadeUp, occFlip } from '$lib/motion';
 	import type { Id } from '$convex/dataModel';
 	import IconUsers from '@tabler/icons-svelte/icons/users';
 	import IconUserPlus from '@tabler/icons-svelte/icons/user-plus';
@@ -171,6 +172,47 @@
 		busy = membershipId;
 		try {
 			await client.mutation(api.admin.verifyMember, { membershipId });
+		} finally {
+			busy = null;
+		}
+	}
+
+	// Role CRUD: admins change roles inline; the select's value stays
+	// server-driven (no bind:) so a rejected change snaps back on re-render.
+	const isChurchAdmin = $derived(myChurch?.membership.role === 'admin');
+	let roleError = $state<string | null>(null);
+
+	async function changeRole(
+		membershipId: Id<'memberships'>,
+		role: 'member' | 'leader' | 'staff' | 'admin'
+	) {
+		busy = `role-${membershipId}`;
+		roleError = null;
+		try {
+			await client.mutation(api.admin.setMemberRole, { membershipId, role });
+		} catch (err) {
+			const raw = err instanceof Error ? err.message : '';
+			roleError =
+				raw.match(/Uncaught Error: ([^\n]+?)(?: at handler.*)?$/m)?.[1] ?? 'Failed to update role';
+		} finally {
+			busy = null;
+		}
+	}
+
+	async function removeMember(member: (typeof members)[number]) {
+		const name = `${member.firstName} ${member.lastName}`.trim() || member.email;
+		if (!confirm(`Remove ${name} from the church? Their account stays; the membership goes.`)) {
+			return;
+		}
+		busy = `rm-${member.membershipId}`;
+		roleError = null;
+		try {
+			await client.mutation(api.admin.removeMember, { membershipId: member.membershipId });
+		} catch (err) {
+			const raw = err instanceof Error ? err.message : '';
+			roleError =
+				raw.match(/Uncaught Error: ([^\n]+?)(?: at handler.*)?$/m)?.[1] ??
+				'Failed to remove member';
 		} finally {
 			busy = null;
 		}
@@ -454,7 +496,11 @@
 			<h2 class="mt-12 font-display text-xl font-bold text-primary">Follow Ups</h2>
 			<div class="mt-4 space-y-3">
 				{#each followUps as followUp (followUp._id)}
-					<div class="card bg-base-200">
+					<div
+						class="card bg-base-200"
+						animate:occFlip
+						out:fadeUp={{ duration: DURATION.fast, distance: 8 }}
+					>
 						<div class="card-body flex-row items-center justify-between p-4">
 							<div>
 								<p class="font-semibold">
@@ -500,7 +546,11 @@
 			</p>
 			<div class="mt-4 space-y-3">
 				{#each recommendedActions as action (`${action.requesterId}-${action.recipientId}`)}
-					<div class="card bg-base-200">
+					<div
+						class="card bg-base-200"
+						animate:occFlip
+						out:fadeUp={{ duration: DURATION.fast, distance: 8 }}
+					>
 						<div class="card-body flex-row items-center justify-between gap-4 p-4">
 							<div>
 								<p class="font-semibold">Introduce {action.aName} to {action.bName}</p>
@@ -607,7 +657,11 @@
 		{#if pendingInvites.length > 0}
 			<div class="mt-3 space-y-2">
 				{#each pendingInvites as invite (invite._id)}
-					<div class="flex items-center justify-between rounded-box bg-base-200 px-4 py-2">
+					<div
+						class="flex items-center justify-between rounded-box bg-base-200 px-4 py-2"
+						animate:occFlip
+						out:fadeUp={{ duration: DURATION.fast, distance: 8 }}
+					>
 						<p class="text-sm">
 							{invite.email}
 							<span class="ml-2 badge badge-ghost badge-sm">{invite.role}</span>
@@ -640,6 +694,13 @@
 				</button>
 			{/each}
 		</div>
+
+		{#if roleError}
+			<div class="mt-4 alert alert-error" transition:fadeUp={{ duration: DURATION.fast }}>
+				<span>{roleError}</span>
+				<button class="btn btn-ghost btn-xs" onclick={() => (roleError = null)}>Dismiss</button>
+			</div>
+		{/if}
 
 		<div class="mt-4 overflow-x-auto">
 			<table class="table">
@@ -696,7 +757,27 @@
 									</div>
 								</div>
 							</td>
-							<td><span class="badge {roleBadge[member.role]}">{member.role}</span></td>
+							<td>
+								{#if isChurchAdmin && member.userId !== myChurch.membership.userId}
+									<select
+										class="select w-28 select-sm"
+										value={member.role}
+										disabled={busy === `role-${member.membershipId}`}
+										onchange={(e) =>
+											changeRole(
+												member.membershipId,
+												e.currentTarget.value as 'member' | 'leader' | 'staff' | 'admin'
+											)}
+									>
+										<option value="member">member</option>
+										<option value="leader">leader</option>
+										<option value="staff">staff</option>
+										<option value="admin">admin</option>
+									</select>
+								{:else}
+									<span class="badge {roleBadge[member.role]}">{member.role}</span>
+								{/if}
+							</td>
 							<td>
 								<span
 									class="badge {member.status === 'verified' ? 'badge-success' : 'badge-warning'}"
@@ -744,6 +825,15 @@
 										</button>
 									{:else}
 										<span class="badge badge-ghost badge-sm">Follow-up open</span>
+									{/if}
+									{#if isChurchAdmin && member.userId !== myChurch.membership.userId}
+										<button
+											class="btn btn-ghost text-error btn-xs"
+											disabled={busy === `rm-${member.membershipId}`}
+											onclick={() => removeMember(member)}
+										>
+											Remove
+										</button>
 									{/if}
 								</div>
 							</td>

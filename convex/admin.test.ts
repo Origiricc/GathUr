@@ -56,6 +56,160 @@ describe('admin.memberJourney', () => {
 	});
 });
 
+describe('admin.setMemberRole', () => {
+	async function seedRoleWorld(t: ReturnType<typeof setup>) {
+		const church = await seedChurch(t, 'First Church');
+		const admin = await seedUser(t, 'admin');
+		const adminMembershipId = await seedMembership(t, {
+			userId: admin.userId,
+			churchId: church,
+			role: 'admin'
+		});
+		const member = await seedUser(t, 'member');
+		const memberMembershipId = await seedMembership(t, { userId: member.userId, churchId: church });
+		return { church, admin, adminMembershipId, member, memberMembershipId };
+	}
+
+	test('admins promote members (verifying them) and the member is notified', async () => {
+		const t = setup();
+		const { admin, member, memberMembershipId } = await seedRoleWorld(t);
+		await t.run(async (ctx) => ctx.db.patch(memberMembershipId, { status: 'pending' }));
+
+		await admin.as.mutation(api.admin.setMemberRole, {
+			membershipId: memberMembershipId,
+			role: 'staff'
+		});
+		const membership = await t.run(async (ctx) => ctx.db.get(memberMembershipId));
+		expect(membership).toMatchObject({ role: 'staff', status: 'verified' });
+		expect(await member.as.query(api.notifications.unreadCount)).toBe(1);
+	});
+
+	test('staff below admin cannot change roles', async () => {
+		const t = setup();
+		const { church, memberMembershipId } = await seedRoleWorld(t);
+		const staff = await seedUser(t, 'staffer');
+		await seedMembership(t, { userId: staff.userId, churchId: church, role: 'staff' });
+		await expect(
+			staff.as.mutation(api.admin.setMemberRole, {
+				membershipId: memberMembershipId,
+				role: 'leader'
+			})
+		).rejects.toThrow('church admin access required');
+	});
+
+	test("admins can't change their own role", async () => {
+		const t = setup();
+		const { admin, adminMembershipId } = await seedRoleWorld(t);
+		await expect(
+			admin.as.mutation(api.admin.setMemberRole, {
+				membershipId: adminMembershipId,
+				role: 'member'
+			})
+		).rejects.toThrow("can't change your own role");
+	});
+
+	test('an admin can demote another admin — one always remains (the caller)', async () => {
+		const t = setup();
+		const { church, admin, adminMembershipId } = await seedRoleWorld(t);
+		const second = await seedUser(t, 'second-admin');
+		await seedMembership(t, { userId: second.userId, churchId: church, role: 'admin' });
+
+		await second.as.mutation(api.admin.setMemberRole, {
+			membershipId: adminMembershipId,
+			role: 'staff'
+		});
+		const demoted = await t.run(async (ctx) => ctx.db.get(adminMembershipId));
+		expect(demoted?.role).toBe('staff');
+		void admin;
+	});
+
+	test('admins of other churches cannot touch the membership', async () => {
+		const t = setup();
+		const { memberMembershipId } = await seedRoleWorld(t);
+		const otherChurch = await seedChurch(t, 'Other Church');
+		const foreignAdmin = await seedUser(t, 'foreign-admin');
+		await seedMembership(t, { userId: foreignAdmin.userId, churchId: otherChurch, role: 'admin' });
+		await expect(
+			foreignAdmin.as.mutation(api.admin.setMemberRole, {
+				membershipId: memberMembershipId,
+				role: 'leader'
+			})
+		).rejects.toThrow('Membership not found');
+	});
+});
+
+describe('admin.removeMember', () => {
+	test('admins remove members; the user row survives', async () => {
+		const t = setup();
+		const church = await seedChurch(t, 'First Church');
+		const admin = await seedUser(t, 'admin');
+		await seedMembership(t, { userId: admin.userId, churchId: church, role: 'admin' });
+		const member = await seedUser(t, 'member');
+		const membershipId = await seedMembership(t, { userId: member.userId, churchId: church });
+
+		await admin.as.mutation(api.admin.removeMember, { membershipId });
+		expect(await t.run(async (ctx) => ctx.db.get(membershipId))).toBeNull();
+		expect(await t.run(async (ctx) => ctx.db.get(member.userId))).not.toBeNull();
+	});
+
+	test("admins can't remove themselves, staff can't remove anyone", async () => {
+		const t = setup();
+		const church = await seedChurch(t, 'First Church');
+		const admin = await seedUser(t, 'admin');
+		const adminMembershipId = await seedMembership(t, {
+			userId: admin.userId,
+			churchId: church,
+			role: 'admin'
+		});
+		const staff = await seedUser(t, 'staffer');
+		await seedMembership(t, { userId: staff.userId, churchId: church, role: 'staff' });
+		const member = await seedUser(t, 'member');
+		const memberMembershipId = await seedMembership(t, { userId: member.userId, churchId: church });
+
+		await expect(
+			admin.as.mutation(api.admin.removeMember, { membershipId: adminMembershipId })
+		).rejects.toThrow("can't remove yourself");
+		await expect(
+			staff.as.mutation(api.admin.removeMember, { membershipId: memberMembershipId })
+		).rejects.toThrow('church admin access required');
+	});
+});
+
+describe('platform.updateChurch', () => {
+	test('platform admins edit details and deactivate; slug never changes', async () => {
+		const t = setup();
+		const church = await seedChurch(t, 'First Church');
+		const operator = await seedUser(t, 'operator', 'ops@origiricc.tech');
+
+		await operator.as.mutation(api.platform.updateChurch, {
+			churchId: church,
+			name: 'Renamed Church',
+			city: 'Tulsa',
+			website: '  https://renamed.example  '
+		});
+		let updated = await t.run(async (ctx) => ctx.db.get(church));
+		expect(updated).toMatchObject({
+			name: 'Renamed Church',
+			city: 'Tulsa',
+			website: 'https://renamed.example',
+			slug: 'first-church'
+		});
+
+		await operator.as.mutation(api.platform.updateChurch, { churchId: church, isActive: false });
+		updated = await t.run(async (ctx) => ctx.db.get(church));
+		expect(updated?.isActive).toBe(false);
+	});
+
+	test('regular users cannot edit churches', async () => {
+		const t = setup();
+		const church = await seedChurch(t, 'First Church');
+		const user = await seedUser(t, 'regular');
+		await expect(
+			user.as.mutation(api.platform.updateChurch, { churchId: church, name: 'Hijacked' })
+		).rejects.toThrow('platform admin access required');
+	});
+});
+
 describe('admin.importMembers', () => {
 	test('joins existing accounts and invites unknown emails, skipping duplicates', async () => {
 		const t = setup();
