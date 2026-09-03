@@ -2,6 +2,7 @@ import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import { requireChurchStaff } from './helpers';
 import { computeChurchHealth } from './care';
+import { notify } from './notifications';
 
 /**
  * The admin dashboard in one query: community-health counts plus enriched
@@ -181,6 +182,247 @@ export const thisWeek = query({
 
 		items.sort((a, b) => b.at - a.at);
 		return items.slice(0, 20);
+	}
+});
+
+/**
+ * New Attendee Journey: one member's pipeline from first visit to
+ * belonging, with dates, an assigned leader, notes, and a derived
+ * "next best action" so no one falls through the cracks.
+ */
+export const memberJourney = query({
+	args: { userId: v.id('users'), now: v.number() },
+	handler: async (ctx, { userId, now }) => {
+		const staff = await requireChurchStaff(ctx);
+		if (!staff) return null;
+		const churchId = staff.membership.churchId;
+
+		const membership = await ctx.db
+			.query('memberships')
+			.withIndex('by_churchId_and_userId', (q) => q.eq('churchId', churchId).eq('userId', userId))
+			.unique();
+		const user = await ctx.db.get(userId);
+		if (!membership || !user) return null;
+
+		const profile = await ctx.db
+			.query('profiles')
+			.withIndex('by_userId', (q) => q.eq('userId', userId))
+			.unique();
+
+		const groupRows = await ctx.db
+			.query('groupMembers')
+			.withIndex('by_userId', (q) => q.eq('userId', userId))
+			.collect();
+		const approvedGroups = groupRows.filter((r) => r.status === 'approved');
+		const firstGroupAt = approvedGroups.length
+			? Math.min(...approvedGroups.map((r) => r.updatedAt))
+			: null;
+
+		const checkIns = await ctx.db
+			.query('eventCheckIns')
+			.withIndex('by_userId', (q) => q.eq('userId', userId))
+			.take(100);
+		const firstCheckInAt = checkIns.length ? Math.min(...checkIns.map((c) => c.checkedInAt)) : null;
+
+		const sent = await ctx.db
+			.query('connections')
+			.withIndex('by_requesterId', (q) => q.eq('requesterId', userId))
+			.collect();
+		const received = await ctx.db
+			.query('connections')
+			.withIndex('by_recipientId', (q) => q.eq('recipientId', userId))
+			.collect();
+		const accepted = [...sent, ...received].filter((c) => c.status === 'accepted');
+		const firstConnectionAt = accepted.length
+			? Math.min(...accepted.map((c) => c.createdAt))
+			: null;
+
+		const followUps = await ctx.db
+			.query('followUps')
+			.withIndex('by_subjectId', (q) => q.eq('subjectId', userId))
+			.collect();
+		const openFollowUp = followUps.find((f) => f.status === 'open' && f.churchId === churchId);
+		const assignee = openFollowUp?.assignedToId
+			? await ctx.db.get(openFollowUp.assignedToId)
+			: null;
+
+		const notes = await ctx.db
+			.query('memberNotes')
+			.withIndex('by_churchId_and_subjectId', (q) =>
+				q.eq('churchId', churchId).eq('subjectId', userId)
+			)
+			.take(50);
+		const enrichedNotes = [];
+		for (const note of notes) {
+			const author = await ctx.db.get(note.authorId);
+			enrichedNotes.push({
+				_id: note._id,
+				body: note.body,
+				createdAt: note.createdAt,
+				authorName: author ? `${author.firstName} ${author.lastName}`.trim() : 'Staff'
+			});
+		}
+		enrichedNotes.sort((a, b) => b.createdAt - a.createdAt);
+
+		const belonging = approvedGroups.length > 0 && accepted.length > 0 && checkIns.length > 0;
+
+		// Next best action, in pipeline order.
+		let nextAction: string;
+		if (membership.status !== 'verified') {
+			nextAction = 'Verify their membership so they can see the community.';
+		} else if (!profile) {
+			nextAction = 'Nudge them to complete their profile — it powers every recommendation.';
+		} else if (approvedGroups.length === 0) {
+			nextAction = 'Recommend a group that fits their life stage and interests.';
+		} else if (checkIns.length === 0) {
+			nextAction = 'Invite them to an upcoming gathering.';
+		} else if (accepted.length === 0) {
+			nextAction = 'Introduce them to someone with shared interests.';
+		} else {
+			nextAction = "They're belonging — keep an eye out and celebrate the wins.";
+		}
+		if (openFollowUp && now - openFollowUp.createdAt > 7 * 86_400_000) {
+			const days = Math.floor((now - openFollowUp.createdAt) / 86_400_000);
+			nextAction = `Their follow-up has been open ${days} days — time to reach out.`;
+		}
+
+		return {
+			userId,
+			membershipId: membership._id,
+			name: `${user.firstName} ${user.lastName}`.trim(),
+			email: user.email,
+			imageUrl: user.imageUrl,
+			role: membership.role,
+			status: membership.status,
+			source: membership.source,
+			stages: [
+				{ key: 'joined', label: 'First joined', at: membership.joinedAt, done: true },
+				{
+					key: 'profile',
+					label: 'Profile completed',
+					at: profile?.updatedAt ?? null,
+					done: profile !== null
+				},
+				{
+					key: 'group',
+					label: 'Joined a group',
+					at: firstGroupAt,
+					done: approvedGroups.length > 0
+				},
+				{
+					key: 'gathering',
+					label: 'Attended a gathering',
+					at: firstCheckInAt,
+					done: checkIns.length > 0
+				},
+				{
+					key: 'connections',
+					label: 'Made a connection',
+					at: firstConnectionAt,
+					done: accepted.length > 0
+				},
+				{ key: 'belonging', label: 'Belonging', at: null, done: belonging }
+			],
+			groupCount: approvedGroups.length,
+			connectionCount: accepted.length,
+			gatheringsAttended: checkIns.length,
+			openFollowUp: openFollowUp
+				? {
+						_id: openFollowUp._id,
+						reason: openFollowUp.reason,
+						createdAt: openFollowUp.createdAt,
+						assigneeName: assignee ? `${assignee.firstName} ${assignee.lastName}`.trim() : null
+					}
+				: null,
+			notes: enrichedNotes,
+			nextAction
+		};
+	}
+});
+
+/**
+ * CSV member import — the first cut of "Connect Church Data". Rows whose
+ * email already has a GathUr account become verified memberships
+ * (source 'import'); everyone else gets a pending invitation that
+ * auto-matches when they sign in with that email.
+ */
+export const importMembers = mutation({
+	args: {
+		rows: v.array(
+			v.object({
+				firstName: v.optional(v.string()),
+				lastName: v.optional(v.string()),
+				email: v.string()
+			})
+		)
+	},
+	handler: async (ctx, { rows }) => {
+		const staff = await requireChurchStaff(ctx);
+		if (!staff) throw new Error('Unauthorized');
+		if (rows.length > 200) throw new Error('Import at most 200 rows at a time');
+		const churchId = staff.membership.churchId;
+		const now = Date.now();
+
+		let joined = 0;
+		let invited = 0;
+		let skipped = 0;
+		for (const row of rows) {
+			const email = row.email.trim().toLowerCase();
+			if (!email.includes('@')) {
+				skipped++;
+				continue;
+			}
+			const user = await ctx.db
+				.query('users')
+				.withIndex('by_email', (q) => q.eq('email', email))
+				.first();
+			if (user) {
+				const existing = await ctx.db
+					.query('memberships')
+					.withIndex('by_churchId_and_userId', (q) =>
+						q.eq('churchId', churchId).eq('userId', user._id)
+					)
+					.unique();
+				if (existing) {
+					skipped++;
+					continue;
+				}
+				await ctx.db.insert('memberships', {
+					userId: user._id,
+					churchId,
+					role: 'member',
+					status: 'verified',
+					source: 'import',
+					joinedAt: now
+				});
+				await notify(ctx, {
+					recipientId: user._id,
+					type: 'church-import',
+					title: `You've been added to your church on GathUr`,
+					actionUrl: '/'
+				});
+				joined++;
+			} else {
+				const invitations = await ctx.db
+					.query('invitations')
+					.withIndex('by_email', (q) => q.eq('email', email))
+					.collect();
+				if (invitations.some((i) => i.status === 'pending' && i.churchId === churchId)) {
+					skipped++;
+					continue;
+				}
+				await ctx.db.insert('invitations', {
+					churchId,
+					email,
+					role: 'member',
+					invitedBy: staff.user._id,
+					status: 'pending',
+					createdAt: now
+				});
+				invited++;
+			}
+		}
+		return { joined, invited, skipped };
 	}
 });
 

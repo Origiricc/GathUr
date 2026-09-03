@@ -2,6 +2,7 @@
 	import { useAuth, useQuery, useConvexClient } from 'convex-svelte';
 	import { resolve } from '$app/paths';
 	import { api } from '$convex/api';
+	import TrendChart from '$lib/components/TrendChart.svelte';
 	import type { Id } from '$convex/dataModel';
 	import IconUsers from '@tabler/icons-svelte/icons/users';
 	import IconUserPlus from '@tabler/icons-svelte/icons/user-plus';
@@ -37,8 +38,15 @@
 	const actionsQuery = $derived.by(() =>
 		useQuery(api.matching.recommendedActions, isStaff ? {} : 'skip')
 	);
+	// Connection Progress range: scopes the trend chart and the impact deltas.
+	let rangeDays = $state(30);
+	const rangeOptions = [
+		{ days: 30, label: '30d' },
+		{ days: 90, label: '90d' },
+		{ days: 365, label: '1y' }
+	];
 	const trendQuery = $derived.by(() =>
-		useQuery(api.care.healthTrend, isStaff ? { sinceDay: now - 35 * 86_400_000 } : 'skip')
+		useQuery(api.care.healthTrend, isStaff ? { sinceDay: now - rangeDays * 86_400_000 } : 'skip')
 	);
 	const followUpsQuery = $derived.by(() => useQuery(api.care.openFollowUps, isStaff ? {} : 'skip'));
 	const invitationsQuery = $derived.by(() =>
@@ -94,8 +102,8 @@
 		counts && counts.total > 0 ? Math.round((counts.connected / counts.total) * 100) : 0
 	);
 
-	// Community Impact: current counts vs the earliest snapshot in the last
-	// ~month (the daily cron accumulates history from launch day).
+	// Community Impact: current counts vs the earliest snapshot in the
+	// selected range (the daily cron accumulates history from launch day).
 	const impact = $derived.by(() => {
 		const snapshots = trendQuery.data ?? [];
 		const baseline = snapshots[0];
@@ -104,11 +112,30 @@
 			sinceDay: baseline.day,
 			connected: counts.connected - baseline.connectedMembers,
 			members: counts.total - baseline.totalMembers,
+			unconnected: counts.unconnected - (baseline.totalMembers - baseline.connectedMembers),
+			drifting: counts.drifting - (baseline.driftingMembers ?? 0),
 			profiles: counts.withProfile - baseline.withProfile,
 			followUpsCompleted:
 				(snapshots[snapshots.length - 1]?.completedFollowUps ?? baseline.completedFollowUps) -
 				baseline.completedFollowUps
 		};
+	});
+
+	// Connection score over time: % of members with a connection or group.
+	const scorePoints = $derived.by(() => {
+		const snapshots = trendQuery.data ?? [];
+		const points = snapshots.map((s) => ({
+			day: s.day,
+			value: s.totalMembers > 0 ? Math.round((s.connectedMembers / s.totalMembers) * 100) : 0
+		}));
+		// Append today's live value so the chart always ends at "now".
+		if (counts && counts.total > 0) {
+			const today = now - (now % 86_400_000);
+			if (!points.some((p) => p.day === today)) {
+				points.push({ day: today, value: Math.round((counts.connected / counts.total) * 100) });
+			}
+		}
+		return points;
 	});
 
 	// Triage segments — Drifting derives from check-in history + church rules.
@@ -358,36 +385,59 @@
 				{/if}
 			</div>
 			<div>
-				<h2 class="font-display text-xl font-bold text-primary">Community Impact</h2>
+				<div class="flex items-center justify-between gap-3">
+					<h2 class="font-display text-xl font-bold text-primary">Connection Progress</h2>
+					<div role="tablist" class="tabs tabs-box tabs-xs">
+						{#each rangeOptions as option (option.days)}
+							<button
+								role="tab"
+								class="tab {rangeDays === option.days ? 'tab-active' : ''}"
+								onclick={() => (rangeDays = option.days)}
+							>
+								{option.label}
+							</button>
+						{/each}
+					</div>
+				</div>
 				<p class="mt-1 text-sm text-base-content/60">
-					Change since {impact ? formatDate(impact.sinceDay) : 'tracking began'}.
+					Connection score — members with at least one connection or group.
 				</p>
+				<div class="card mt-4 bg-base-200">
+					<div class="card-body p-4">
+						<TrendChart points={scorePoints} label="Connection score" unit="%" />
+					</div>
+				</div>
 				{#if impact}
-					<div class="mt-4 grid grid-cols-2 gap-3">
+					<p class="mt-4 text-sm text-base-content/60">
+						Community impact since {formatDate(impact.sinceDay)} — down is good for the last two.
+					</p>
+					<div class="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
 						<div class="card bg-base-200">
-							<div class="card-body p-4">
-								<p class="text-2xl font-bold">
+							<div class="card-body p-3">
+								<p class="text-xl font-bold">
 									{impact.connected >= 0 ? '+' : ''}{impact.connected}
 								</p>
-								<p class="text-sm text-base-content/60">Connected members</p>
+								<p class="text-xs text-base-content/60">Connected</p>
 							</div>
 						</div>
 						<div class="card bg-base-200">
-							<div class="card-body p-4">
-								<p class="text-2xl font-bold">{impact.members >= 0 ? '+' : ''}{impact.members}</p>
-								<p class="text-sm text-base-content/60">Members</p>
+							<div class="card-body p-3">
+								<p class="text-xl font-bold">+{impact.followUpsCompleted}</p>
+								<p class="text-xs text-base-content/60">Follow-ups done</p>
 							</div>
 						</div>
 						<div class="card bg-base-200">
-							<div class="card-body p-4">
-								<p class="text-2xl font-bold">{impact.profiles >= 0 ? '+' : ''}{impact.profiles}</p>
-								<p class="text-sm text-base-content/60">Profiles completed</p>
+							<div class="card-body p-3">
+								<p class="text-xl font-bold">
+									{impact.unconnected >= 0 ? '+' : ''}{impact.unconnected}
+								</p>
+								<p class="text-xs text-base-content/60">Unconnected ↓</p>
 							</div>
 						</div>
 						<div class="card bg-base-200">
-							<div class="card-body p-4">
-								<p class="text-2xl font-bold">+{impact.followUpsCompleted}</p>
-								<p class="text-sm text-base-content/60">Follow-ups completed</p>
+							<div class="card-body p-3">
+								<p class="text-xl font-bold">{impact.drifting >= 0 ? '+' : ''}{impact.drifting}</p>
+								<p class="text-xs text-base-content/60">Drifting ↓</p>
 							</div>
 						</div>
 					</div>
@@ -628,8 +678,13 @@
 									</div>
 									<div>
 										<p class="font-semibold">
-											{member.firstName}
-											{member.lastName}
+											<a
+												href={resolve('/admin/journey/[userId]', { userId: member.userId })}
+												class="hover:text-primary"
+											>
+												{member.firstName}
+												{member.lastName}
+											</a>
 											{#if member.isNew}
 												<span class="ml-1 badge badge-sm badge-info">New</span>
 											{/if}

@@ -100,6 +100,38 @@
 		setTimeout(() => (copied = false), 1500);
 	}
 
+	// CSV import: "first,last,email" per line; a lone email works too.
+	let csvText = $state('');
+	let importing = $state(false);
+	let importResult = $state<{ joined: number; invited: number; skipped: number } | null>(null);
+
+	async function runImport() {
+		const rows = csvText
+			.split('\n')
+			.map((line) => line.trim())
+			.filter(Boolean)
+			.map((line) => {
+				const cells = line.split(',').map((c) => c.trim().replace(/^"|"$/g, ''));
+				const emailIndex = cells.findIndex((c) => c.includes('@'));
+				if (emailIndex === -1) return null;
+				return {
+					firstName: emailIndex > 0 ? cells[0] : undefined,
+					lastName: emailIndex > 1 ? cells[1] : undefined,
+					email: cells[emailIndex]
+				};
+			})
+			.filter((row): row is NonNullable<typeof row> => row !== null)
+			.slice(0, 200);
+		if (rows.length === 0) return;
+		importing = true;
+		try {
+			importResult = await client.mutation(api.admin.importMembers, { rows });
+			csvText = '';
+		} finally {
+			importing = false;
+		}
+	}
+
 	const isLaunched = $derived((myChurch?.church.status ?? 'launched') === 'launched');
 </script>
 
@@ -196,6 +228,39 @@
 					<button class="btn mt-3 gap-1 btn-outline btn-sm" onclick={copyLink}>
 						<IconCopy size={14} />
 						{copied ? 'Copied!' : 'Copy link'}
+					</button>
+				</div>
+			</div>
+		</div>
+
+		<!-- CSV import -->
+		<h2 class="mt-10 font-display text-xl font-bold text-primary">Import your members</h2>
+		<p class="mt-1 text-sm text-base-content/60">
+			Paste CSV rows — <code>first,last,email</code> (or just emails). Members with a GathUr account join
+			instantly; everyone else is matched by email when they sign up. Your data is secure and private.
+		</p>
+		<div class="card mt-4 bg-base-200">
+			<div class="card-body p-4">
+				<textarea
+					class="textarea w-full font-mono text-sm"
+					rows="5"
+					placeholder="Sarah,Chen,sarah@example.com&#10;Marcus,Lee,marcus@example.com"
+					bind:value={csvText}></textarea>
+				<div class="card-actions items-center justify-between">
+					{#if importResult}
+						<p class="text-sm text-success">
+							{importResult.joined} joined · {importResult.invited} invited · {importResult.skipped}
+							skipped
+						</p>
+					{:else}
+						<span></span>
+					{/if}
+					<button
+						class="btn btn-primary btn-sm"
+						disabled={importing || !csvText.trim()}
+						onclick={runImport}
+					>
+						{importing ? 'Importing…' : 'Import members'}
 					</button>
 				</div>
 			</div>
