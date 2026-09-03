@@ -1,5 +1,6 @@
+import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
-import { getCurrentUser } from './helpers';
+import { getCurrentUser, requireUser } from './helpers';
 
 /** The signed-in user's row, or null while auth/user creation is pending. */
 export const current = query({
@@ -35,6 +36,8 @@ export const ensureUserExists = mutation({
 		}
 
 		const nameParts = (identity.name ?? '').trim().split(/\s+/);
+		// Names are only seeded here — after this, the user (or church staff)
+		// owns them via updateMe / admin.updateMember; Clerk never overwrites.
 		return await ctx.db.insert('users', {
 			tokenIdentifier: identity.tokenIdentifier,
 			clerkId: identity.subject,
@@ -46,5 +49,21 @@ export const ensureUserExists = mutation({
 			createdAt: now,
 			updatedAt: now
 		});
+	}
+});
+
+/**
+ * Self-service account update — how accounts that arrived from Clerk with
+ * no name (email-only sign-ups) get one without asking an admin.
+ */
+export const updateMe = mutation({
+	args: { firstName: v.string(), lastName: v.string() },
+	handler: async (ctx, args) => {
+		const user = await requireUser(ctx);
+		const firstName = args.firstName.trim();
+		const lastName = args.lastName.trim();
+		if (!firstName) throw new Error('First name is required');
+		await ctx.db.patch(user._id, { firstName, lastName, updatedAt: Date.now() });
+		return user._id;
 	}
 });

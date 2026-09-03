@@ -39,6 +39,7 @@
 		{/if}
 	</a>
 {/if}
+<a href={resolve('/profile')} class="btn btn-ghost btn-sm">Profile</a>
 {#if isStaff}
 	<a href={resolve('/admin')} class="btn btn-ghost btn-sm">Admin</a>
 {/if}
