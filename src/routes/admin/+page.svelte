@@ -34,6 +34,9 @@
 		useQuery(api.admin.groupHealth, isStaff ? { now } : 'skip')
 	);
 	const thisWeekQuery = $derived.by(() => useQuery(api.admin.thisWeek, isStaff ? { now } : 'skip'));
+	const actionsQuery = $derived.by(() =>
+		useQuery(api.matching.recommendedActions, isStaff ? {} : 'skip')
+	);
 	const trendQuery = $derived.by(() =>
 		useQuery(api.care.healthTrend, isStaff ? { sinceDay: now - 35 * 86_400_000 } : 'skip')
 	);
@@ -72,6 +75,21 @@
 	const followUps = $derived(followUpsQuery.data ?? []);
 	const groupHealth = $derived(groupHealthQuery.data ?? []);
 	const thisWeek = $derived(thisWeekQuery.data ?? []);
+	const recommendedActions = $derived(actionsQuery.data ?? []);
+	let introduced = $state<Set<string>>(new Set());
+
+	async function introduce(action: (typeof recommendedActions)[number]) {
+		busy = `intro-${action.requesterId}-${action.recipientId}`;
+		try {
+			await client.mutation(api.connections.introduce, {
+				requesterId: action.requesterId,
+				recipientId: action.recipientId
+			});
+			introduced = new Set([...introduced, `${action.requesterId}-${action.recipientId}`]);
+		} finally {
+			busy = null;
+		}
+	}
 	const connectedPct = $derived(
 		counts && counts.total > 0 ? Math.round((counts.connected / counts.total) * 100) : 0
 	);
@@ -411,6 +429,37 @@
 									Dismiss
 								</button>
 							</div>
+						</div>
+					</div>
+				{/each}
+			</div>
+		{/if}
+
+		<!-- Recommended actions -->
+		{#if recommendedActions.length > 0}
+			<h2 class="mt-12 font-display text-xl font-bold text-primary">Recommended Actions</h2>
+			<p class="mt-1 text-sm text-base-content/60">
+				Transparent matches — every suggestion shows exactly why.
+			</p>
+			<div class="mt-4 space-y-3">
+				{#each recommendedActions as action (`${action.requesterId}-${action.recipientId}`)}
+					<div class="card bg-base-200">
+						<div class="card-body flex-row items-center justify-between gap-4 p-4">
+							<div>
+								<p class="font-semibold">Introduce {action.aName} to {action.bName}</p>
+								<p class="text-sm text-base-content/60">{action.reasons.join(' · ')}</p>
+							</div>
+							{#if introduced.has(`${action.requesterId}-${action.recipientId}`)}
+								<span class="badge badge-success">Introduced</span>
+							{:else}
+								<button
+									class="btn btn-primary btn-sm"
+									disabled={busy === `intro-${action.requesterId}-${action.recipientId}`}
+									onclick={() => introduce(action)}
+								>
+									Introduce
+								</button>
+							{/if}
 						</div>
 					</div>
 				{/each}

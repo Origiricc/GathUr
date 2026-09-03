@@ -3,6 +3,7 @@ import { mutation, query } from './_generated/server';
 import type { QueryCtx, MutationCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
 import { getMember, requireMember } from './helpers';
+import { notify } from './notifications';
 
 async function getMyGroupRow(
 	ctx: QueryCtx | MutationCtx,
@@ -288,27 +289,37 @@ export const invite = mutation({
 			.unique();
 		if (!target || target.status !== 'verified') throw new Error('Member not found');
 
+		const group = await ctx.db.get(groupId);
 		const now = Date.now();
 		const existing = await getMyGroupRow(ctx, groupId, userId);
+		let rowId: Id<'groupMembers'>;
 		if (existing) {
-			if (existing.status === 'declined') {
-				await ctx.db.patch(existing._id, {
-					status: 'pending',
-					direction: 'invited',
-					updatedAt: now
-				});
-			}
-			return existing._id;
+			if (existing.status !== 'declined') return existing._id;
+			await ctx.db.patch(existing._id, {
+				status: 'pending',
+				direction: 'invited',
+				updatedAt: now
+			});
+			rowId = existing._id;
+		} else {
+			rowId = await ctx.db.insert('groupMembers', {
+				groupId,
+				userId,
+				role: 'member',
+				status: 'pending',
+				direction: 'invited',
+				joinedAt: now,
+				updatedAt: now
+			});
 		}
-		return await ctx.db.insert('groupMembers', {
-			groupId,
-			userId,
-			role: 'member',
-			status: 'pending',
-			direction: 'invited',
-			joinedAt: now,
-			updatedAt: now
+		await notify(ctx, {
+			recipientId: userId,
+			type: 'group-invite',
+			title: `You're invited to ${group?.name ?? 'a group'}`,
+			body: `${member.user.firstName} ${member.user.lastName}`.trim() + ' invited you.',
+			actionUrl: '/groups'
 		});
+		return rowId;
 	}
 });
 
@@ -371,6 +382,15 @@ export const respond = mutation({
 			status: approve ? 'approved' : 'declined',
 			updatedAt: Date.now()
 		});
+		if (approve) {
+			const group = await ctx.db.get(row.groupId);
+			await notify(ctx, {
+				recipientId: row.userId,
+				type: 'group-request-approved',
+				title: `You're in ${group?.name ?? 'the group'}!`,
+				actionUrl: '/groups'
+			});
+		}
 		return rowId;
 	}
 });

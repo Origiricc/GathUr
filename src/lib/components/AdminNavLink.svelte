@@ -22,8 +22,10 @@
 </script>
 
 {#if hasChurch}
+	<a href={resolve('/people')} class="btn btn-ghost btn-sm">People</a>
 	<a href={resolve('/groups')} class="btn btn-ghost btn-sm">Groups</a>
 	<a href={resolve('/events')} class="btn btn-ghost btn-sm">Events</a>
+	<a href={resolve('/community')} class="btn btn-ghost btn-sm">Community</a>
 {/if}
 {#if isStaff}
 	<a href={resolve('/admin')} class="btn btn-ghost btn-sm">Admin</a>

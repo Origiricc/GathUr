@@ -3,6 +3,7 @@ import { internalMutation, mutation, query } from './_generated/server';
 import type { QueryCtx, MutationCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
 import { requireChurchStaff } from './helpers';
+import { notify } from './notifications';
 
 /**
  * Compute a church's community-health picture: enriched member rows with
@@ -177,7 +178,7 @@ export const createFollowUp = mutation({
 		);
 		if (open) return open._id;
 
-		return await ctx.db.insert('followUps', {
+		const followUpId = await ctx.db.insert('followUps', {
 			churchId: staff.membership.churchId,
 			subjectId: args.subjectId,
 			assignedToId: args.assignedToId ?? staff.user._id,
@@ -188,6 +189,18 @@ export const createFollowUp = mutation({
 			dueAt: args.dueAt,
 			createdAt: Date.now()
 		});
+		// Assigning someone else's care to a teammate deserves a ping.
+		if (args.assignedToId && args.assignedToId !== staff.user._id) {
+			const subject = await ctx.db.get(args.subjectId);
+			await notify(ctx, {
+				recipientId: args.assignedToId,
+				type: 'follow-up-assigned',
+				title: `Follow up with ${subject ? `${subject.firstName} ${subject.lastName}`.trim() : 'a member'}`,
+				body: args.note,
+				actionUrl: '/admin'
+			});
+		}
+		return followUpId;
 	}
 });
 

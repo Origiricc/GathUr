@@ -7,6 +7,7 @@
 	import { resolve } from '$app/paths';
 	import ConvexClerkAuth from '$lib/components/ConvexClerkAuth.svelte';
 	import AdminNavLink from '$lib/components/AdminNavLink.svelte';
+	import NotificationBell from '$lib/components/NotificationBell.svelte';
 
 	let { children } = $props();
 
@@ -34,6 +35,7 @@
 						</Show>
 						<Show when="signed-in">
 							<AdminNavLink />
+							<NotificationBell />
 							<UserButton />
 						</Show>
 					</nav>

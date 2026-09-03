@@ -31,6 +31,13 @@
 		useQuery(api.events.peopleYouMet, isVerifiedMember ? { now } : 'skip')
 	);
 	const peopleYouMet = $derived(peopleYouMetQuery.data ?? []);
+
+	const matchQuery = $derived.by(() =>
+		useQuery(api.matching.forMe, isVerifiedMember ? { now } : 'skip')
+	);
+	const personRec = $derived(matchQuery.data?.people[0] ?? null);
+	const groupRec = $derived(matchQuery.data?.groups[0] ?? null);
+	const eventRec = $derived(matchQuery.data?.events[0] ?? null);
 </script>
 
 <Show when="signed-out">
@@ -100,25 +107,37 @@
 				</div>
 			{/if}
 			<div class="mt-8 grid gap-4 sm:grid-cols-3">
-				<div class="card bg-base-200">
+				<a href={resolve('/people')} class="card bg-base-200 transition-colors hover:bg-base-300">
 					<div class="card-body">
 						<IconUsers class="text-primary" size={24} />
-						<h2 class="card-title text-base">People to meet</h2>
-						<p class="text-sm text-base-content/60">Recommendations are coming soon.</p>
+						<h2 class="card-title text-base">
+							{personRec ? `Meet ${personRec.name}` : 'People to meet'}
+						</h2>
+						<p class="text-sm text-base-content/60">
+							{personRec ? personRec.reasons[0] : 'Complete your profile to get recommendations.'}
+						</p>
 					</div>
-				</div>
+				</a>
 				<a href={resolve('/groups')} class="card bg-base-200 transition-colors hover:bg-base-300">
 					<div class="card-body">
 						<IconUsersGroup class="text-primary" size={24} />
-						<h2 class="card-title text-base">Groups to join</h2>
-						<p class="text-sm text-base-content/60">Discover small groups at your church.</p>
+						<h2 class="card-title text-base">
+							{groupRec ? `Join ${groupRec.name}` : 'Groups to join'}
+						</h2>
+						<p class="text-sm text-base-content/60">
+							{groupRec ? groupRec.reasons[0] : 'Discover small groups at your church.'}
+						</p>
 					</div>
 				</a>
 				<a href={resolve('/events')} class="card bg-base-200 transition-colors hover:bg-base-300">
 					<div class="card-body">
 						<IconCalendarEvent class="text-primary" size={24} />
-						<h2 class="card-title text-base">Upcoming gatherings</h2>
-						<p class="text-sm text-base-content/60">Events and meetups, with one-tap RSVP.</p>
+						<h2 class="card-title text-base">
+							{eventRec ? eventRec.title : 'Upcoming gatherings'}
+						</h2>
+						<p class="text-sm text-base-content/60">
+							{eventRec ? eventRec.reasons[0] : 'Events and meetups, with one-tap RSVP.'}
+						</p>
 					</div>
 				</a>
 			</div>
