@@ -130,6 +130,33 @@ describe('invitations.accept', () => {
 	});
 });
 
+describe('invitations.accept team fields', () => {
+	test('captures ministry and responsibilities on team invites', async () => {
+		const t = setup();
+		const church = await seedChurch(t, 'First Church');
+		const admin = await seedUser(t, 'admin');
+		const leader = await seedUser(t, 'leader');
+		const invitationId = await seedInvitation(t, {
+			churchId: church,
+			email: 'leader@example.com',
+			role: 'leader',
+			invitedBy: admin.userId
+		});
+
+		const membershipId = await leader.as.mutation(api.invitations.accept, {
+			invitationId,
+			ministry: 'Young Adults',
+			responsibilities: ['welcome-new-people', 'introductions']
+		});
+		const membership = await t.run(async (ctx) => ctx.db.get(membershipId));
+		expect(membership).toMatchObject({
+			role: 'leader',
+			ministry: 'Young Adults',
+			responsibilities: ['welcome-new-people', 'introductions']
+		});
+	});
+});
+
 describe('invitations.invite', () => {
 	test('dedupes a pending invitation for the same email and church', async () => {
 		const t = setup();

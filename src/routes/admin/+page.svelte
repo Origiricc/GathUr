@@ -244,10 +244,17 @@
 	</section>
 {:else}
 	<section>
-		<h1 class="font-display text-3xl font-bold text-primary">Community Health</h1>
-		<p class="mt-1 text-base-content/70">
-			{myChurch.church.name} · A quick look at your church community.
-		</p>
+		<div class="flex items-start justify-between gap-3">
+			<div>
+				<h1 class="font-display text-3xl font-bold text-primary">Community Health</h1>
+				<p class="mt-1 text-base-content/70">
+					{myChurch.church.name} · A quick look at your church community.
+				</p>
+			</div>
+			{#if myChurch.membership.role === 'admin'}
+				<a href={resolve('/admin/settings')} class="btn btn-outline btn-sm">Church settings</a>
+			{/if}
+		</div>
 
 		<div class="mt-8 grid gap-4 lg:grid-cols-3">
 			<!-- % Connected ring -->

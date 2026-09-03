@@ -25,6 +25,9 @@ export const churchesSchema = {
 				driftingDays: v.number()
 			})
 		),
+		// Whether self-joins start 'pending' until staff verify. Absent means
+		// verification IS required — churches opt out, not in.
+		requireVerification: v.optional(v.boolean()),
 		// White-label branding (per OCC's shipped workspace-branding model):
 		// lets a church present GathUr under its own identity.
 		branding: v.optional(

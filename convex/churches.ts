@@ -1,7 +1,8 @@
 import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
-import { getCurrentUser, requireUser } from './helpers';
+import { getCurrentUser, requireChurchStaff, requireUser } from './helpers';
+import { notify } from './notifications';
 
 /** Slug from a church name, suffixed until unique. */
 export async function uniqueChurchSlug(ctx: MutationCtx, name: string) {
@@ -85,10 +86,14 @@ export const create = mutation({
 	}
 });
 
-/** Join an existing church as a member. */
+/**
+ * Join an existing church as a member. Verification is on by default —
+ * self-joins start 'pending' until staff verify (churches can opt out via
+ * requireVerification: false). Staff get pinged so no one waits unseen.
+ */
 export const join = mutation({
-	args: { churchId: v.id('churches') },
-	handler: async (ctx, { churchId }) => {
+	args: { churchId: v.id('churches'), source: v.optional(v.literal('qr')) },
+	handler: async (ctx, { churchId, source }) => {
 		const user = await requireUser(ctx);
 		const church = await ctx.db.get(churchId);
 		if (!church || !church.isActive) throw new Error('Church not found');
@@ -99,15 +104,83 @@ export const join = mutation({
 			.unique();
 		if (existing) return existing._id;
 
-		// TODO: church-verification workflow — for the MVP everyone joins as
-		// a verified member; later, joins start 'pending' until staff approve.
-		return await ctx.db.insert('memberships', {
+		const status = church.requireVerification === false ? 'verified' : 'pending';
+		const membershipId = await ctx.db.insert('memberships', {
 			userId: user._id,
 			churchId,
 			role: 'member',
-			status: 'verified',
-			source: 'self-join',
+			status,
+			source: source ?? 'self-join',
 			joinedAt: Date.now()
 		});
+
+		if (status === 'pending') {
+			const memberships = await ctx.db
+				.query('memberships')
+				.withIndex('by_churchId', (q) => q.eq('churchId', churchId))
+				.take(200);
+			const staffRows = memberships
+				.filter((m) => m.role === 'admin' || m.role === 'staff')
+				.slice(0, 10);
+			const name = `${user.firstName} ${user.lastName}`.trim() || user.email;
+			for (const staff of staffRows) {
+				await notify(ctx, {
+					recipientId: staff.userId,
+					type: 'member-pending',
+					title: `${name} is waiting to be verified`,
+					actionUrl: '/admin'
+				});
+			}
+		}
+		return membershipId;
+	}
+});
+
+/** Public-ish church info for the per-church join link/QR. */
+export const bySlug = query({
+	args: { slug: v.string() },
+	handler: async (ctx, { slug }) => {
+		const church = await ctx.db
+			.query('churches')
+			.withIndex('by_slug', (q) => q.eq('slug', slug))
+			.unique();
+		if (!church || !church.isActive) return null;
+		return {
+			_id: church._id,
+			name: church.name,
+			city: church.city,
+			state: church.state,
+			imageUrl: church.imageUrl
+		};
+	}
+});
+
+/**
+ * Church setup wizard: priorities, connection rules, verification policy,
+ * and launch status — the admin's "make GathUr ours" screen.
+ */
+export const updateSettings = mutation({
+	args: {
+		priorities: v.optional(v.array(v.string())),
+		connectionRules: v.optional(
+			v.object({ newAttendeeDays: v.number(), driftingDays: v.number() })
+		),
+		requireVerification: v.optional(v.boolean()),
+		status: v.optional(v.union(v.literal('draft'), v.literal('launched')))
+	},
+	handler: async (ctx, args) => {
+		const staff = await requireChurchStaff(ctx);
+		if (!staff) throw new Error('Unauthorized');
+		if (staff.membership.role !== 'admin') {
+			throw new Error('Unauthorized: church admin access required');
+		}
+		if (args.connectionRules) {
+			const { newAttendeeDays, driftingDays } = args.connectionRules;
+			if (newAttendeeDays < 1 || newAttendeeDays > 365 || driftingDays < 1 || driftingDays > 365) {
+				throw new Error('Connection rules must be between 1 and 365 days');
+			}
+		}
+		await ctx.db.patch(staff.membership.churchId, args);
+		return staff.membership.churchId;
 	}
 });

@@ -100,6 +100,14 @@
 			<p class="mt-1 text-base-content/70">
 				{myChurch.church.name} · Here are your next best steps this week.
 			</p>
+			{#if !isVerifiedMember}
+				<div class="mt-6 alert bg-secondary text-secondary-content">
+					<span>
+						Your membership is awaiting verification by your church team — recommendations, groups,
+						and gatherings unlock as soon as they approve you.
+					</span>
+				</div>
+			{/if}
 			{#if !profileQuery.isLoading && !profileQuery.data}
 				<div class="mt-6 alert bg-secondary text-secondary-content">
 					<span>Tell us what you're looking for so we can recommend people and groups.</span>

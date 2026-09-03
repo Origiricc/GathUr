@@ -37,10 +37,18 @@ export const forMe = query({
 	}
 });
 
-/** Accept an invitation → verified membership with the invited role. */
+/**
+ * Accept an invitation → verified membership with the invited role. Team
+ * members (leader/staff/admin) can hand over their ministry + what they're
+ * responsible for, which scopes their admin views later.
+ */
 export const accept = mutation({
-	args: { invitationId: v.id('invitations') },
-	handler: async (ctx, { invitationId }) => {
+	args: {
+		invitationId: v.id('invitations'),
+		ministry: v.optional(v.string()),
+		responsibilities: v.optional(v.array(v.string()))
+	},
+	handler: async (ctx, { invitationId, ministry, responsibilities }) => {
 		const user = await requireUser(ctx);
 		const invitation = await ctx.db.get(invitationId);
 		if (
@@ -53,6 +61,11 @@ export const accept = mutation({
 
 		await ctx.db.patch(invitationId, { status: 'accepted', respondedAt: Date.now() });
 
+		const teamFields = {
+			ministry: ministry?.trim() || undefined,
+			responsibilities: responsibilities?.length ? responsibilities : undefined
+		};
+
 		const existing = await ctx.db
 			.query('memberships')
 			.withIndex('by_churchId_and_userId', (q) =>
@@ -63,7 +76,11 @@ export const accept = mutation({
 			// Upgrade role if the invite carries a higher one; never downgrade.
 			const rank = { member: 0, leader: 1, staff: 2, admin: 3 };
 			if (rank[invitation.role] > rank[existing.role]) {
-				await ctx.db.patch(existing._id, { role: invitation.role, status: 'verified' });
+				await ctx.db.patch(existing._id, {
+					role: invitation.role,
+					status: 'verified',
+					...teamFields
+				});
 			}
 			return existing._id;
 		}
@@ -74,7 +91,8 @@ export const accept = mutation({
 			role: invitation.role,
 			status: 'verified',
 			source: 'team-invite',
-			joinedAt: Date.now()
+			joinedAt: Date.now(),
+			...teamFields
 		});
 	}
 });
