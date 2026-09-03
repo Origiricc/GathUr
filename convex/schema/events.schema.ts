@@ -36,9 +36,14 @@ export const eventsSchema = {
 		capacityLimit: v.optional(v.number()),
 		waitlistEnabled: v.boolean(),
 		currentReservations: v.number(), // denormalized count of 'going', kept in the same mutations
+		// Set once the post-event cron has settled going/checked_in RSVPs into
+		// attended/no_show. Absent (undefined sorts first) means still live.
+		finalizedAt: v.optional(v.number()),
 		createdBy: v.id('users'),
 		createdAt: v.number()
-	}).index('by_churchId_and_startsAt', ['churchId', 'startsAt']),
+	})
+		.index('by_churchId_and_startsAt', ['churchId', 'startsAt'])
+		.index('by_finalizedAt_and_startsAt', ['finalizedAt', 'startsAt']),
 
 	eventRsvps: defineTable({
 		eventId: v.id('events'),
@@ -59,4 +64,5 @@ export const eventsSchema = {
 	})
 		.index('by_eventId', ['eventId'])
 		.index('by_eventId_and_userId', ['eventId', 'userId'])
+		.index('by_userId', ['userId'])
 };

@@ -23,6 +23,14 @@
 	const me = $derived(meQuery.data ?? null);
 	const myChurch = $derived(churchQuery.data ?? null);
 	const loading = $derived(auth.isLoading || (auth.isAuthenticated && churchQuery.isLoading));
+
+	// Fixed at page load — never pass a live Date.now() into a query arg.
+	const now = Date.now();
+	const isVerifiedMember = $derived(myChurch?.membership.status === 'verified');
+	const peopleYouMetQuery = $derived.by(() =>
+		useQuery(api.events.peopleYouMet, isVerifiedMember ? { now } : 'skip')
+	);
+	const peopleYouMet = $derived(peopleYouMetQuery.data ?? []);
 </script>
 
 <Show when="signed-out">
@@ -114,6 +122,42 @@
 					</div>
 				</a>
 			</div>
+
+			{#if peopleYouMet.length > 0}
+				<h2 class="mt-12 font-display text-xl font-bold text-primary">People you met</h2>
+				<p class="mt-1 text-sm text-base-content/60">
+					You were at the same gatherings recently — say hi again.
+				</p>
+				<div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+					{#each peopleYouMet as person (person.userId)}
+						<div class="card bg-base-200">
+							<div class="card-body flex-row items-center gap-3 p-4">
+								<div class="avatar">
+									{#if person.imageUrl}
+										<div class="size-10 rounded-full">
+											<img src={person.imageUrl} alt="" />
+										</div>
+									{:else}
+										<div
+											class="flex size-10 items-center justify-center rounded-full bg-secondary text-secondary-content"
+										>
+											<span class="font-semibold">{person.name[0] ?? '?'}</span>
+										</div>
+									{/if}
+								</div>
+								<div class="min-w-0">
+									<p class="truncate font-semibold">{person.name}</p>
+									<p class="truncate text-sm text-base-content/60">
+										{person.sharedCount > 1
+											? `${person.sharedCount} gatherings together`
+											: `Met at ${person.lastEventTitle}`}
+									</p>
+								</div>
+							</div>
+						</div>
+					{/each}
+				</div>
+			{/if}
 		</section>
 	{/if}
 </Show>

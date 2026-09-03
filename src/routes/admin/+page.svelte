@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { useAuth, useQuery, useConvexClient } from 'convex-svelte';
+	import { resolve } from '$app/paths';
 	import { api } from '$convex/api';
 	import type { Id } from '$convex/dataModel';
 	import IconUsers from '@tabler/icons-svelte/icons/users';
@@ -28,6 +29,13 @@
 
 	const dashboardQuery = $derived.by(() =>
 		useQuery(api.admin.dashboard, isStaff ? { now } : 'skip')
+	);
+	const groupHealthQuery = $derived.by(() =>
+		useQuery(api.admin.groupHealth, isStaff ? { now } : 'skip')
+	);
+	const thisWeekQuery = $derived.by(() => useQuery(api.admin.thisWeek, isStaff ? { now } : 'skip'));
+	const trendQuery = $derived.by(() =>
+		useQuery(api.care.healthTrend, isStaff ? { sinceDay: now - 35 * 86_400_000 } : 'skip')
 	);
 	const followUpsQuery = $derived.by(() => useQuery(api.care.openFollowUps, isStaff ? {} : 'skip'));
 	const invitationsQuery = $derived.by(() =>
@@ -62,18 +70,38 @@
 	const counts = $derived(dashboardQuery.data?.counts ?? null);
 	const members = $derived(dashboardQuery.data?.rows ?? []);
 	const followUps = $derived(followUpsQuery.data ?? []);
+	const groupHealth = $derived(groupHealthQuery.data ?? []);
+	const thisWeek = $derived(thisWeekQuery.data ?? []);
 	const connectedPct = $derived(
 		counts && counts.total > 0 ? Math.round((counts.connected / counts.total) * 100) : 0
 	);
 
-	// Triage segments (Drifting needs attendance history — not derivable yet)
-	type Segment = 'all' | 'new' | 'unconnected' | 'looking';
+	// Community Impact: current counts vs the earliest snapshot in the last
+	// ~month (the daily cron accumulates history from launch day).
+	const impact = $derived.by(() => {
+		const snapshots = trendQuery.data ?? [];
+		const baseline = snapshots[0];
+		if (!counts || !baseline) return null;
+		return {
+			sinceDay: baseline.day,
+			connected: counts.connected - baseline.connectedMembers,
+			members: counts.total - baseline.totalMembers,
+			profiles: counts.withProfile - baseline.withProfile,
+			followUpsCompleted:
+				(snapshots[snapshots.length - 1]?.completedFollowUps ?? baseline.completedFollowUps) -
+				baseline.completedFollowUps
+		};
+	});
+
+	// Triage segments — Drifting derives from check-in history + church rules.
+	type Segment = 'all' | 'new' | 'unconnected' | 'drifting' | 'looking';
 	let segment = $state<Segment>('all');
 
 	const segments: { key: Segment; label: string }[] = [
 		{ key: 'all', label: 'All' },
 		{ key: 'new', label: 'New' },
 		{ key: 'unconnected', label: 'Unconnected' },
+		{ key: 'drifting', label: 'Drifting' },
 		{ key: 'looking', label: 'Looking' }
 	];
 
@@ -83,6 +111,8 @@
 				return members.filter((m) => m.isNew);
 			case 'unconnected':
 				return members.filter((m) => !m.isConnected);
+			case 'drifting':
+				return members.filter((m) => m.isDrifting);
 			case 'looking':
 				return members.filter((m) => m.looking);
 			default:
@@ -103,10 +133,25 @@
 
 	function followUpReason(member: (typeof members)[number]) {
 		if (member.isNew) return 'new-attendee' as const;
+		if (member.isDrifting) return 'drifting' as const;
 		if (!member.isConnected) return 'unconnected' as const;
 		if (member.looking) return 'looking' as const;
 		return 'manual' as const;
 	}
+
+	const healthBadge: Record<string, { label: string; class: string }> = {
+		'high-demand': { label: 'High Demand', class: 'badge-warning' },
+		growing: { label: 'Growing', class: 'badge-info' },
+		'needs-support': { label: 'Needs Support', class: 'badge-error' },
+		stable: { label: 'Stable', class: 'badge-success' }
+	};
+
+	const feedIcon: Record<string, string> = {
+		'new-member': '👋',
+		'new-group': '🌱',
+		gathering: '🔥',
+		'follow-up': '✅'
+	};
 
 	async function createFollowUp(member: (typeof members)[number]) {
 		busy = `fu-${member.userId}`;
@@ -241,8 +286,8 @@
 				<div class="card bg-base-200">
 					<div class="card-body p-4">
 						<IconWaveSine class="text-error" size={22} />
-						<p class="text-2xl font-bold">–</p>
-						<p class="text-sm text-base-content/60">Drifting · needs attendance data</p>
+						<p class="text-2xl font-bold">{counts?.drifting ?? '–'}</p>
+						<p class="text-sm text-base-content/60">Drifting</p>
 					</div>
 				</div>
 				<div class="card bg-base-200">
@@ -263,6 +308,69 @@
 						<p class="text-sm text-base-content/60">Open follow-ups</p>
 					</div>
 				</div>
+			</div>
+		</div>
+
+		<!-- This Week activity feed + Community Impact -->
+		<div class="mt-12 grid gap-8 lg:grid-cols-2">
+			<div>
+				<h2 class="font-display text-xl font-bold text-primary">This Week</h2>
+				<p class="mt-1 text-sm text-base-content/60">What happened in your community.</p>
+				{#if thisWeek.length > 0}
+					<ul class="mt-4 space-y-2">
+						{#each thisWeek as item, i (i)}
+							<li class="flex items-center gap-3 rounded-box bg-base-200 px-4 py-2">
+								<span aria-hidden="true">{feedIcon[item.type] ?? '•'}</span>
+								<span class="flex-1 text-sm">{item.label}</span>
+								<span class="text-xs text-base-content/50">{formatDate(item.at)}</span>
+							</li>
+						{/each}
+					</ul>
+				{:else}
+					<p class="mt-4 rounded-box bg-base-200 px-4 py-6 text-sm text-base-content/60">
+						{thisWeekQuery.isLoading ? 'Loading…' : 'Nothing yet this week — it will fill up.'}
+					</p>
+				{/if}
+			</div>
+			<div>
+				<h2 class="font-display text-xl font-bold text-primary">Community Impact</h2>
+				<p class="mt-1 text-sm text-base-content/60">
+					Change since {impact ? formatDate(impact.sinceDay) : 'tracking began'}.
+				</p>
+				{#if impact}
+					<div class="mt-4 grid grid-cols-2 gap-3">
+						<div class="card bg-base-200">
+							<div class="card-body p-4">
+								<p class="text-2xl font-bold">
+									{impact.connected >= 0 ? '+' : ''}{impact.connected}
+								</p>
+								<p class="text-sm text-base-content/60">Connected members</p>
+							</div>
+						</div>
+						<div class="card bg-base-200">
+							<div class="card-body p-4">
+								<p class="text-2xl font-bold">{impact.members >= 0 ? '+' : ''}{impact.members}</p>
+								<p class="text-sm text-base-content/60">Members</p>
+							</div>
+						</div>
+						<div class="card bg-base-200">
+							<div class="card-body p-4">
+								<p class="text-2xl font-bold">{impact.profiles >= 0 ? '+' : ''}{impact.profiles}</p>
+								<p class="text-sm text-base-content/60">Profiles completed</p>
+							</div>
+						</div>
+						<div class="card bg-base-200">
+							<div class="card-body p-4">
+								<p class="text-2xl font-bold">+{impact.followUpsCompleted}</p>
+								<p class="text-sm text-base-content/60">Follow-ups completed</p>
+							</div>
+						</div>
+					</div>
+				{:else}
+					<p class="mt-4 rounded-box bg-base-200 px-4 py-6 text-sm text-base-content/60">
+						Deltas appear once daily snapshots accumulate (they run automatically).
+					</p>
+				{/if}
 			</div>
 		</div>
 
@@ -306,6 +414,58 @@
 						</div>
 					</div>
 				{/each}
+			</div>
+		{/if}
+
+		<!-- Group health -->
+		{#if groupHealth.length > 0}
+			<h2 class="mt-12 font-display text-xl font-bold text-primary">Groups & Leaders</h2>
+			<p class="mt-1 text-sm text-base-content/60">
+				Health derives from membership, demand, and gathering activity.
+			</p>
+			<div class="mt-4 overflow-x-auto">
+				<table class="table">
+					<thead>
+						<tr>
+							<th>Group</th>
+							<th>Health</th>
+							<th>Members</th>
+							<th>Leaders</th>
+							<th>Waiting</th>
+							<th>Gatherings (30d)</th>
+							<th></th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each groupHealth as group (group.groupId)}
+							<tr>
+								<td>
+									<p class="font-semibold">{group.name}</p>
+									<p class="text-sm text-base-content/60">{group.reason}</p>
+								</td>
+								<td>
+									<span class="badge {healthBadge[group.health].class}">
+										{healthBadge[group.health].label}
+									</span>
+								</td>
+								<td class="text-center">{group.memberCount}</td>
+								<td class="text-center">{group.leaderCount}</td>
+								<td class="text-center">{group.pendingRequests}</td>
+								<td class="text-center">
+									{group.recentGatherings} past · {group.upcomingGatherings} upcoming
+								</td>
+								<td>
+									<a
+										href={resolve('/groups/[id]', { id: group.groupId })}
+										class="btn btn-outline btn-xs"
+									>
+										View group
+									</a>
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
 			</div>
 		{/if}
 
@@ -373,9 +533,6 @@
 					{s.label}
 				</button>
 			{/each}
-			<button role="tab" class="tab tab-disabled" disabled title="Needs attendance data">
-				Drifting
-			</button>
 		</div>
 
 		<div class="mt-4 overflow-x-auto">
@@ -388,6 +545,7 @@
 						<th>Connections</th>
 						<th>Groups</th>
 						<th>Looking for</th>
+						<th>Last attended</th>
 						<th>Joined</th>
 						<th></th>
 					</tr>
@@ -419,6 +577,9 @@
 											{#if member.isNew}
 												<span class="ml-1 badge badge-sm badge-info">New</span>
 											{/if}
+											{#if member.isDrifting}
+												<span class="ml-1 badge badge-sm badge-error">Drifting</span>
+											{/if}
 										</p>
 										<p class="text-sm text-base-content/60">{member.email}</p>
 									</div>
@@ -446,6 +607,9 @@
 								{:else if !member.hasProfile}
 									<span class="text-sm text-base-content/50">No profile yet</span>
 								{/if}
+							</td>
+							<td class="text-sm text-base-content/60">
+								{member.lastCheckInAt ? formatDate(member.lastCheckInAt) : '—'}
 							</td>
 							<td class="text-sm text-base-content/60">{formatDate(member.joinedAt)}</td>
 							<td>
@@ -475,7 +639,7 @@
 						</tr>
 					{:else}
 						<tr>
-							<td colspan="8" class="py-8 text-center text-base-content/60">
+							<td colspan="9" class="py-8 text-center text-base-content/60">
 								{dashboardQuery.isLoading ? 'Loading members…' : 'No members in this segment.'}
 							</td>
 						</tr>

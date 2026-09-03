@@ -97,6 +97,52 @@ describe('follow-up lifecycle', () => {
 		);
 	});
 
+	test('drifting derives from stale check-in history, not absence of it', async () => {
+		const t = setup();
+		const { church, staff } = await seedStaffAndSubject(t);
+		const now = Date.now();
+		const eventId = await t.run(async (ctx) =>
+			ctx.db.insert('events', {
+				churchId: church,
+				title: 'Old gathering',
+				startsAt: now - 40 * 86_400_000,
+				visibility: 'church',
+				waitlistEnabled: false,
+				currentReservations: 0,
+				createdBy: staff.userId,
+				createdAt: 1
+			})
+		);
+
+		// Drifter: attended 40 days ago, nothing since. Joined long ago (not new).
+		const drifter = await seedUser(t, 'drifter');
+		await seedMembership(t, { userId: drifter.userId, churchId: church, joinedAt: 1 });
+		// Regular: attended yesterday.
+		const regular = await seedUser(t, 'regular');
+		await seedMembership(t, { userId: regular.userId, churchId: church, joinedAt: 1 });
+		await t.run(async (ctx) => {
+			await ctx.db.insert('eventCheckIns', {
+				eventId,
+				userId: drifter.userId,
+				checkedInAt: now - 40 * 86_400_000
+			});
+			await ctx.db.insert('eventCheckIns', {
+				eventId,
+				userId: regular.userId,
+				checkedInAt: now - 86_400_000
+			});
+		});
+
+		const dashboard = await staff.as.query(api.admin.dashboard, { now });
+		expect(dashboard?.counts.drifting).toBe(1);
+		const byUser = new Map(dashboard?.rows.map((r) => [r.userId, r]));
+		expect(byUser.get(drifter.userId)?.isDrifting).toBe(true);
+		expect(byUser.get(regular.userId)?.isDrifting).toBe(false);
+		// Never attended ≠ drifting — the subject has no check-ins at all.
+		const subjectRow = dashboard?.rows.find((r) => r.firstName === 'subject');
+		expect(subjectRow?.isDrifting).toBe(false);
+	});
+
 	test('plain members cannot create follow-ups', async () => {
 		const t = setup();
 		const church = await seedChurch(t, 'First Church');

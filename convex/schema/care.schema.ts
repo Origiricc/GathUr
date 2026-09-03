@@ -45,6 +45,8 @@ export const careSchema = {
 		lookingMembers: v.number(),
 		newMembers30d: v.number(),
 		withProfile: v.number(),
+		// Optional because snapshots written before drifting derivation existed lack it.
+		driftingMembers: v.optional(v.number()),
 		openFollowUps: v.number(),
 		completedFollowUps: v.number()
 	}).index('by_churchId_and_day', ['churchId', 'day'])

@@ -1,8 +1,17 @@
 import { v } from 'convex/values';
-import { mutation, query } from './_generated/server';
+import { internalMutation, mutation, query } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
 import { getMember, requireMember } from './helpers';
+
+// A gathering without an explicit end is treated as 2h long, and we wait
+// another hour after the end before settling RSVPs so late check-ins count.
+const DEFAULT_DURATION_MS = 2 * 3_600_000;
+const FINALIZE_GRACE_MS = 3_600_000;
+
+export function eventEndsAt(event: Pick<Doc<'events'>, 'startsAt' | 'endsAt'>) {
+	return event.endsAt ?? event.startsAt + DEFAULT_DURATION_MS;
+}
 
 // RSVP states that occupy a capacity spot.
 const OCCUPYING = ['going', 'checked_in', 'attended'] as const;
@@ -252,6 +261,138 @@ export const rsvp = mutation({
 			});
 		}
 		return rowId;
+	}
+});
+
+/**
+ * Settle RSVPs on gatherings that have ended: checked_in → attended, and
+ * going → no_show when the gathering tracked attendance (had any check-in)
+ * or → attended when it didn't (no data to hold against anyone). Waitlisted,
+ * interested, and invited rows are left as-is — they never claimed a spot.
+ * Runs hourly from crons.ts; idempotent via events.finalizedAt.
+ */
+export const finalizePastEvents = internalMutation({
+	args: {},
+	handler: async (ctx) => {
+		const now = Date.now();
+		const candidates = await ctx.db
+			.query('events')
+			.withIndex('by_finalizedAt_and_startsAt', (q) =>
+				q.eq('finalizedAt', undefined).lte('startsAt', now)
+			)
+			.take(100);
+
+		for (const event of candidates) {
+			if (eventEndsAt(event) + FINALIZE_GRACE_MS > now) continue;
+
+			const rsvps = await ctx.db
+				.query('eventRsvps')
+				.withIndex('by_eventId', (q) => q.eq('eventId', event._id))
+				.collect();
+			const trackedAttendance = rsvps.some((r) => r.status === 'checked_in');
+
+			let attended = 0;
+			for (const rsvp of rsvps) {
+				if (rsvp.status === 'checked_in') {
+					await ctx.db.patch(rsvp._id, { status: 'attended', updatedAt: now });
+					attended++;
+				} else if (rsvp.status === 'going') {
+					const settled = trackedAttendance ? 'no_show' : 'attended';
+					await ctx.db.patch(rsvp._id, { status: settled, updatedAt: now });
+					if (settled === 'attended') attended++;
+				} else if (rsvp.status === 'attended') {
+					attended++;
+				}
+			}
+
+			await ctx.db.patch(event._id, { finalizedAt: now, currentReservations: attended });
+		}
+		return null;
+	}
+});
+
+/**
+ * People I shared a gathering with recently (by check-ins), for the
+ * post-gathering "you met" prompt. Excludes existing connections and
+ * members whose profile is private.
+ */
+export const peopleYouMet = query({
+	args: { now: v.number() },
+	handler: async (ctx, { now }) => {
+		const member = await getMember(ctx);
+		if (!member) return null;
+		const since = now - 30 * 86_400_000;
+
+		const myCheckIns = await ctx.db
+			.query('eventCheckIns')
+			.withIndex('by_userId', (q) => q.eq('userId', member.user._id))
+			.order('desc')
+			.take(25);
+
+		const met = new Map<
+			Id<'users'>,
+			{ sharedCount: number; lastEventId: Id<'events'>; lastMetAt: number }
+		>();
+		for (const checkIn of myCheckIns) {
+			if (checkIn.checkedInAt < since) continue;
+			const others = await ctx.db
+				.query('eventCheckIns')
+				.withIndex('by_eventId', (q) => q.eq('eventId', checkIn.eventId))
+				.take(200);
+			for (const other of others) {
+				if (other.userId === member.user._id) continue;
+				const entry = met.get(other.userId);
+				if (entry) {
+					entry.sharedCount++;
+					if (checkIn.checkedInAt > entry.lastMetAt) {
+						entry.lastMetAt = checkIn.checkedInAt;
+						entry.lastEventId = checkIn.eventId;
+					}
+				} else {
+					met.set(other.userId, {
+						sharedCount: 1,
+						lastEventId: checkIn.eventId,
+						lastMetAt: checkIn.checkedInAt
+					});
+				}
+			}
+		}
+
+		// People I already have an accepted connection with aren't "new" meetings.
+		const connected = new Set<Id<'users'>>();
+		const sent = await ctx.db
+			.query('connections')
+			.withIndex('by_requesterId', (q) => q.eq('requesterId', member.user._id))
+			.collect();
+		const received = await ctx.db
+			.query('connections')
+			.withIndex('by_recipientId', (q) => q.eq('recipientId', member.user._id))
+			.collect();
+		for (const c of sent) if (c.status === 'accepted') connected.add(c.recipientId);
+		for (const c of received) if (c.status === 'accepted') connected.add(c.requesterId);
+
+		const rows = [];
+		for (const [userId, entry] of met) {
+			if (connected.has(userId)) continue;
+			const user = await ctx.db.get(userId);
+			if (!user) continue;
+			const profile = await ctx.db
+				.query('profiles')
+				.withIndex('by_userId', (q) => q.eq('userId', userId))
+				.unique();
+			if (profile?.privacy?.visibility === 'private') continue;
+			const event = await ctx.db.get(entry.lastEventId);
+			rows.push({
+				userId,
+				name: `${user.firstName} ${user.lastName}`.trim(),
+				imageUrl: user.imageUrl,
+				sharedCount: entry.sharedCount,
+				lastMetAt: entry.lastMetAt,
+				lastEventTitle: event?.title ?? 'a gathering'
+			});
+		}
+		rows.sort((a, b) => b.lastMetAt - a.lastMetAt || b.sharedCount - a.sharedCount);
+		return rows.slice(0, 8);
 	}
 });
 

@@ -11,8 +11,10 @@ import { requireChurchStaff } from './helpers';
  * ctx.run* call, per the OCC pattern).
  *
  * Derived states (per docs/product/admin-experience.md): these come from
- * membership, connection, and group data — not manual tagging. 'Drifting'
- * needs attendance history (event check-ins) and is not computed yet.
+ * membership, connection, group, and attendance data — not manual tagging.
+ * 'Drifting' = attended before but nothing within the church's driftingDays
+ * window (default 21); members who never checked in anywhere aren't drifting,
+ * they're unconnected.
  */
 export async function computeChurchHealth(
 	ctx: QueryCtx | MutationCtx,
@@ -23,6 +25,8 @@ export async function computeChurchHealth(
 	const church = await ctx.db.get(churchId);
 	const newAttendeeDays = church?.connectionRules?.newAttendeeDays ?? 30;
 	const since = now - newAttendeeDays * 86_400_000;
+	const driftingDays = church?.connectionRules?.driftingDays ?? 21;
+	const driftingSince = now - driftingDays * 86_400_000;
 
 	const memberships = await ctx.db
 		.query('memberships')
@@ -38,7 +42,8 @@ export async function computeChurchHealth(
 		withProfile: 0,
 		looking: 0,
 		connected: 0,
-		unconnected: 0
+		unconnected: 0,
+		drifting: 0
 	};
 
 	for (const membership of memberships) {
@@ -65,9 +70,17 @@ export async function computeChurchHealth(
 			.collect();
 		const groupCount = groupRows.filter((g) => g.status === 'approved').length;
 
+		// Latest check-in (insertion order tracks checkedInAt closely enough).
+		const lastCheckIn = await ctx.db
+			.query('eventCheckIns')
+			.withIndex('by_userId', (q) => q.eq('userId', user._id))
+			.order('desc')
+			.first();
+
 		const isNew = membership.joinedAt >= since;
 		const looking = (profile?.lookingFor.length ?? 0) > 0;
 		const isConnected = connectionCount > 0 || groupCount > 0;
+		const isDrifting = lastCheckIn !== null && lastCheckIn.checkedInAt < driftingSince && !isNew;
 
 		if (membership.status === 'verified') counts.verified++;
 		else counts.pending++;
@@ -76,6 +89,7 @@ export async function computeChurchHealth(
 		if (looking) counts.looking++;
 		if (isConnected) counts.connected++;
 		else counts.unconnected++;
+		if (isDrifting) counts.drifting++;
 
 		rows.push({
 			membershipId: membership._id,
@@ -93,9 +107,11 @@ export async function computeChurchHealth(
 			hasProfile: profile !== null,
 			connectionCount,
 			groupCount,
+			lastCheckInAt: lastCheckIn?.checkedInAt ?? null,
 			isNew,
 			looking,
-			isConnected
+			isConnected,
+			isDrifting
 		});
 	}
 	rows.sort((a, b) => b.joinedAt - a.joinedAt);
@@ -281,6 +297,7 @@ export const snapshotAll = internalMutation({
 				lookingMembers: counts.looking,
 				newMembers30d: counts.newSince,
 				withProfile: counts.withProfile,
+				driftingMembers: counts.drifting,
 				openFollowUps: followUps.length,
 				completedFollowUps: completed.length
 			};

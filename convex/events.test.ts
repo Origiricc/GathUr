@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { api } from './_generated/api';
+import { api, internal } from './_generated/api';
 import { seedChurch, seedMembership, seedUser, setup, type T } from './test.helpers';
 import type { Id } from './_generated/dataModel';
 
@@ -91,6 +91,118 @@ describe('events.rsvp', () => {
 		await expect(
 			outsider.as.mutation(api.events.rsvp, { eventId, status: 'going' })
 		).rejects.toThrow('Event not found');
+	});
+});
+
+describe('events.finalizePastEvents', () => {
+	// seedEventWorld events start at t=2, so they ended long before Date.now().
+
+	test('with attendance tracked: checked_in → attended, going → no_show', async () => {
+		const t = setup();
+		const { eventId, attend } = await seedEventWorld(t);
+		const anna = await attend('anna');
+		const ben = await attend('ben');
+		const cara = await attend('cara');
+		await anna.as.mutation(api.events.checkIn, { eventId });
+		await ben.as.mutation(api.events.rsvp, { eventId, status: 'going' });
+		await cara.as.mutation(api.events.rsvp, { eventId, status: 'interested' });
+
+		await t.mutation(internal.events.finalizePastEvents, {});
+
+		const rows = await t.run(async (ctx) =>
+			ctx.db
+				.query('eventRsvps')
+				.withIndex('by_eventId', (q) => q.eq('eventId', eventId))
+				.collect()
+		);
+		const statuses = new Map(rows.map((r) => [r.userId, r.status]));
+		expect(statuses.get(anna.userId)).toBe('attended');
+		expect(statuses.get(ben.userId)).toBe('no_show');
+		expect(statuses.get(cara.userId)).toBe('interested');
+
+		const event = await getEvent(t, eventId);
+		expect(event.finalizedAt).toBeTypeOf('number');
+		expect(event.currentReservations).toBe(1);
+	});
+
+	test('without attendance tracking: going gets the benefit of the doubt', async () => {
+		const t = setup();
+		const { eventId, attend } = await seedEventWorld(t);
+		const anna = await attend('anna');
+		await anna.as.mutation(api.events.rsvp, { eventId, status: 'going' });
+
+		await t.mutation(internal.events.finalizePastEvents, {});
+
+		const rsvp = await t.run(async (ctx) =>
+			ctx.db
+				.query('eventRsvps')
+				.withIndex('by_eventId_and_userId', (q) =>
+					q.eq('eventId', eventId).eq('userId', anna.userId)
+				)
+				.unique()
+		);
+		expect(rsvp?.status).toBe('attended');
+		expect((await getEvent(t, eventId)).currentReservations).toBe(1);
+	});
+
+	test('leaves ongoing and future gatherings alone', async () => {
+		const t = setup();
+		const church = await seedChurch(t, 'First Church');
+		const host = await seedUser(t, 'host');
+		await seedMembership(t, { userId: host.userId, churchId: church });
+		const futureId: Id<'events'> = await host.as.mutation(api.events.create, {
+			title: 'Next week',
+			startsAt: Date.now() + 7 * 86_400_000,
+			visibility: 'church'
+		});
+
+		await t.mutation(internal.events.finalizePastEvents, {});
+		const event = await t.run(async (ctx) => ctx.db.get(futureId));
+		expect(event?.finalizedAt).toBeUndefined();
+	});
+});
+
+describe('events.peopleYouMet', () => {
+	test('surfaces co-attendees from shared check-ins', async () => {
+		const t = setup();
+		const { eventId, attend } = await seedEventWorld(t);
+		const anna = await attend('anna');
+		const ben = await attend('ben');
+		await anna.as.mutation(api.events.checkIn, { eventId });
+		await ben.as.mutation(api.events.checkIn, { eventId });
+
+		const met = await anna.as.query(api.events.peopleYouMet, { now: Date.now() });
+		expect(met).toHaveLength(1);
+		expect(met?.[0]).toMatchObject({ userId: ben.userId, sharedCount: 1 });
+	});
+
+	test('honors private profiles and existing connections', async () => {
+		const t = setup();
+		const { eventId, attend } = await seedEventWorld(t);
+		const anna = await attend('anna');
+		const ben = await attend('ben');
+		const cara = await attend('cara');
+		for (const person of [anna, ben, cara]) {
+			await person.as.mutation(api.events.checkIn, { eventId });
+		}
+		await t.run(async (ctx) => {
+			await ctx.db.insert('profiles', {
+				userId: ben.userId,
+				interests: [],
+				lookingFor: [],
+				privacy: { visibility: 'private', recommendable: false, showContact: false },
+				updatedAt: 1
+			});
+			await ctx.db.insert('connections', {
+				requesterId: anna.userId,
+				recipientId: cara.userId,
+				status: 'accepted',
+				createdAt: 1
+			});
+		});
+
+		const met = await anna.as.query(api.events.peopleYouMet, { now: Date.now() });
+		expect(met).toEqual([]);
 	});
 });
 
