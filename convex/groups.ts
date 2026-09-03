@@ -2,8 +2,9 @@ import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import type { QueryCtx, MutationCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
-import { getMember, requireMember } from './helpers';
+import { getMember, requireMember, displayName } from './helpers';
 import { notify } from './notifications';
+import { addUserToGroupThreadIfExists } from './messages';
 
 async function getMyGroupRow(
 	ctx: QueryCtx | MutationCtx,
@@ -184,7 +185,7 @@ export const joinRequests = query({
 				requests.push({
 					rowId: row._id,
 					groupName: group.name,
-					userName: `${user.firstName} ${user.lastName}`.trim(),
+					userName: displayName(user),
 					requestedAt: row.updatedAt
 				});
 			}
@@ -216,7 +217,7 @@ export const detail = query({
 			if (!user) continue;
 			members.push({
 				userId: user._id,
-				name: `${user.firstName} ${user.lastName}`.trim(),
+				name: displayName(user),
 				imageUrl: user.imageUrl,
 				role: row.role
 			});
@@ -266,7 +267,7 @@ export const invitableMembers = query({
 			if (m.status !== 'verified' || inGroup.has(m.userId)) continue;
 			const user = await ctx.db.get(m.userId);
 			if (!user) continue;
-			candidates.push({ userId: user._id, name: `${user.firstName} ${user.lastName}`.trim() });
+			candidates.push({ userId: user._id, name: displayName(user) });
 		}
 		candidates.sort((a, b) => a.name.localeCompare(b.name));
 		return candidates;
@@ -316,7 +317,7 @@ export const invite = mutation({
 			recipientId: userId,
 			type: 'group-invite',
 			title: `You're invited to ${group?.name ?? 'a group'}`,
-			body: `${member.user.firstName} ${member.user.lastName}`.trim() + ' invited you.',
+			body: displayName(member.user) + ' invited you.',
 			actionUrl: '/groups'
 		});
 		return rowId;
@@ -363,6 +364,12 @@ export const respondToInvite = mutation({
 			status: accept ? 'approved' : 'declined',
 			updatedAt: Date.now()
 		});
+		if (accept) {
+			const group = await ctx.db.get(row.groupId);
+			if (group) {
+				await addUserToGroupThreadIfExists(ctx, group.churchId, group._id, member.user._id);
+			}
+		}
 		return rowId;
 	}
 });
@@ -384,6 +391,9 @@ export const respond = mutation({
 		});
 		if (approve) {
 			const group = await ctx.db.get(row.groupId);
+			if (group) {
+				await addUserToGroupThreadIfExists(ctx, group.churchId, group._id, row.userId);
+			}
 			await notify(ctx, {
 				recipientId: row.userId,
 				type: 'group-request-approved',

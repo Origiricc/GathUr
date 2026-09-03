@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
 	import { useAuth, useQuery, useConvexClient } from 'convex-svelte';
 	import { resolve } from '$app/paths';
 	import { api } from '$convex/api';
@@ -46,6 +47,17 @@
 		busy = 'leave';
 		try {
 			await client.mutation(api.groups.leave, { groupId });
+		} finally {
+			busy = null;
+		}
+	}
+
+	async function openChat() {
+		busy = 'chat';
+		try {
+			const threadId = await client.mutation(api.messages.openGroupChat, { groupId });
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve()d base + query string
+			await goto(resolve('/messages') + `?thread=${threadId}`);
 		} finally {
 			busy = null;
 		}
@@ -130,8 +142,11 @@
 					{/if}
 				</div>
 			</div>
-			<div>
+			<div class="flex flex-wrap items-center gap-2">
 				{#if group.myStatus === 'approved'}
+					<button class="btn btn-primary btn-sm" disabled={busy === 'chat'} onclick={openChat}>
+						Group chat
+					</button>
 					{#if group.myRole === 'member'}
 						<button class="btn btn-ghost btn-sm" disabled={busy === 'leave'} onclick={leaveGroup}>
 							Leave group

@@ -19,6 +19,7 @@ import type * as groups from "../groups.js";
 import type * as helpers from "../helpers.js";
 import type * as invitations from "../invitations.js";
 import type * as matching from "../matching.js";
+import type * as messages from "../messages.js";
 import type * as notifications from "../notifications.js";
 import type * as platform from "../platform.js";
 import type * as profiles from "../profiles.js";
@@ -42,6 +43,7 @@ declare const fullApi: ApiFromModules<{
   helpers: typeof helpers;
   invitations: typeof invitations;
   matching: typeof matching;
+  messages: typeof messages;
   notifications: typeof notifications;
   platform: typeof platform;
   profiles: typeof profiles;

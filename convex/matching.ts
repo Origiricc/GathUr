@@ -2,15 +2,26 @@ import { v } from 'convex/values';
 import { query } from './_generated/server';
 import type { QueryCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
-import { getMember, requireChurchStaff } from './helpers';
+import { getMember, requireChurchStaff, displayName } from './helpers';
 import { getConnectionSets } from './connections';
 
 /**
  * Matching engine v1 — deliberately transparent, no AI: every score is a sum
  * of legible signals and every recommendation carries its "why you may
- * connect" reasons. Signals: shared interests, same life stage, looking-for
+ * connect" reasons.
+ *
+ * The PRIMARY basis is the age range (life stage) — that's how churches
+ * actually group people: two members who have both declared different life
+ * stages are never suggested to each other, and a shared one is the
+ * heaviest signal. Secondary signals: shared interests, looking-for
  * overlap, shared groups, shared gatherings.
  */
+
+/** False only when both declared a life stage and they differ. */
+export function sameAgeRange(mine: Doc<'profiles'> | null, theirs: Doc<'profiles'> | null) {
+	if (!mine?.lifeStage || !theirs?.lifeStage) return true;
+	return mine.lifeStage === theirs.lifeStage;
+}
 
 const lookingForLabels: Record<string, string> = {
 	friends: 'friends',
@@ -31,16 +42,17 @@ export function scorePair(
 	let score = 0;
 	const reasons: string[] = [];
 
+	// Age range leads — it's the church's own grouping principle.
+	if (mine?.lifeStage && mine.lifeStage === theirs?.lifeStage) {
+		score += 5;
+		reasons.push('Same life stage');
+	}
+
 	const myInterests = new Set(mine?.interests ?? []);
 	const sharedInterests = (theirs?.interests ?? []).filter((i) => myInterests.has(i));
 	if (sharedInterests.length > 0) {
 		score += 2 * Math.min(sharedInterests.length, 3);
 		reasons.push(`Shared interests: ${sharedInterests.slice(0, 3).join(', ')}`);
-	}
-
-	if (mine?.lifeStage && mine.lifeStage === theirs?.lifeStage) {
-		score += 3;
-		reasons.push('Same life stage');
 	}
 
 	const myLooking = new Set(mine?.lookingFor ?? []);
@@ -135,10 +147,11 @@ export const forMe = query({
 		const myEvents = await recentEventIds(ctx, member.user._id);
 		const { any: alreadyLinked, accepted } = await getConnectionSets(ctx, member.user._id);
 
-		// People to meet
+		// People to meet — never suggest across declared age ranges.
 		const people = [];
 		for (const { user, profile } of await candidateMembers(ctx, churchId, member.user._id)) {
 			if (alreadyLinked.has(user._id)) continue;
+			if (!sameAgeRange(myProfile, profile)) continue;
 			const theirGroups = await approvedGroupIds(ctx, user._id);
 			const theirEvents = await recentEventIds(ctx, user._id);
 			const { score, reasons } = scorePair(
@@ -150,7 +163,7 @@ export const forMe = query({
 			if (score <= 0) continue;
 			people.push({
 				userId: user._id,
-				name: `${user.firstName} ${user.lastName}`.trim(),
+				name: displayName(user),
 				imageUrl: user.imageUrl,
 				score,
 				reasons
@@ -299,6 +312,7 @@ export const recommendedActions = query({
 				const a = enriched[i];
 				const b = enriched[j];
 				if (a.connections.has(b.user._id)) continue;
+				if (!sameAgeRange(a.profile, b.profile)) continue;
 				const { score, reasons } = scorePair(
 					a.profile,
 					b.profile,
@@ -309,8 +323,8 @@ export const recommendedActions = query({
 				pairs.push({
 					requesterId: a.user._id,
 					recipientId: b.user._id,
-					aName: `${a.user.firstName} ${a.user.lastName}`.trim(),
-					bName: `${b.user.firstName} ${b.user.lastName}`.trim(),
+					aName: displayName(a.user),
+					bName: displayName(b.user),
 					score,
 					reasons
 				});

@@ -19,6 +19,12 @@
 	});
 	const isPlatformAdmin = $derived(platformQuery.data === true);
 	const hasChurch = $derived(myChurchQuery.data != null);
+	const isVerified = $derived(myChurchQuery.data?.membership.status === 'verified');
+
+	const unreadQuery = $derived.by(() =>
+		useQuery(api.messages.unreadThreads, isVerified ? {} : 'skip')
+	);
+	const unreadThreads = $derived(unreadQuery.data ?? 0);
 </script>
 
 {#if hasChurch}
@@ -26,7 +32,14 @@
 	<a href={resolve('/groups')} class="btn btn-ghost btn-sm">Groups</a>
 	<a href={resolve('/events')} class="btn btn-ghost btn-sm">Events</a>
 	<a href={resolve('/community')} class="btn btn-ghost btn-sm">Community</a>
+	<a href={resolve('/messages')} class="btn btn-ghost btn-sm">
+		Messages
+		{#if unreadThreads > 0}
+			<span class="badge badge-xs badge-primary">{unreadThreads}</span>
+		{/if}
+	</a>
 {/if}
+<a href={resolve('/profile')} class="btn btn-ghost btn-sm">Profile</a>
 {#if isStaff}
 	<a href={resolve('/admin')} class="btn btn-ghost btn-sm">Admin</a>
 {/if}

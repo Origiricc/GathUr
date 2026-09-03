@@ -1,4 +1,7 @@
 @import 'tailwindcss';
+/* Motion: `use:reveal` — hides data-occ-reveal elements from first paint
+ * (JS + motion allowed only). See src/lib/motion/. */
+@import '../lib/motion/reveal.css';
 @plugin '@tailwindcss/typography';
 
 @plugin 'daisyui' {

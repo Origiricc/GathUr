@@ -1,8 +1,33 @@
 import { v } from 'convex/values';
-import { mutation, query } from './_generated/server';
-import { requireChurchStaff } from './helpers';
+import { internalMutation, mutation, query } from './_generated/server';
+import { requireChurchStaff, displayName } from './helpers';
 import { computeChurchHealth } from './care';
 import { notify } from './notifications';
+
+/**
+ * Ops escape hatch (CLI only): set a member's church role by email.
+ * `npx convex run admin:setRoleByEmail '{"email":"…","role":"admin"}'`
+ */
+export const setRoleByEmail = internalMutation({
+	args: {
+		email: v.string(),
+		role: v.union(v.literal('member'), v.literal('leader'), v.literal('staff'), v.literal('admin'))
+	},
+	handler: async (ctx, { email, role }) => {
+		const user = await ctx.db
+			.query('users')
+			.withIndex('by_email', (q) => q.eq('email', email.trim().toLowerCase()))
+			.first();
+		if (!user) throw new Error('No user with that email');
+		const membership = await ctx.db
+			.query('memberships')
+			.withIndex('by_userId', (q) => q.eq('userId', user._id))
+			.first();
+		if (!membership) throw new Error('That user has no church membership');
+		await ctx.db.patch(membership._id, { role, status: 'verified' });
+		return { membershipId: membership._id, role };
+	}
+});
 
 /**
  * The admin dashboard in one query: community-health counts plus enriched
@@ -128,7 +153,7 @@ export const thisWeek = query({
 			if (!user) continue;
 			items.push({
 				type: 'new-member',
-				label: `${user.firstName} ${user.lastName}`.trim() + ' joined',
+				label: displayName(user) + ' joined',
 				at: membership.joinedAt
 			});
 		}
@@ -175,7 +200,7 @@ export const thisWeek = query({
 			const subject = await ctx.db.get(followUp.subjectId);
 			items.push({
 				type: 'follow-up',
-				label: `Follow-up completed for ${subject ? `${subject.firstName} ${subject.lastName}`.trim() : 'a member'}`,
+				label: `Follow-up completed for ${subject ? displayName(subject) : 'a member'}`,
 				at: followUp.completedAt
 			});
 		}
@@ -259,7 +284,7 @@ export const memberJourney = query({
 				_id: note._id,
 				body: note.body,
 				createdAt: note.createdAt,
-				authorName: author ? `${author.firstName} ${author.lastName}`.trim() : 'Staff'
+				authorName: author ? displayName(author) : 'Staff'
 			});
 		}
 		enrichedNotes.sort((a, b) => b.createdAt - a.createdAt);
@@ -289,7 +314,7 @@ export const memberJourney = query({
 		return {
 			userId,
 			membershipId: membership._id,
-			name: `${user.firstName} ${user.lastName}`.trim(),
+			name: displayName(user),
 			email: user.email,
 			imageUrl: user.imageUrl,
 			role: membership.role,
@@ -331,7 +356,7 @@ export const memberJourney = query({
 						_id: openFollowUp._id,
 						reason: openFollowUp.reason,
 						createdAt: openFollowUp.createdAt,
-						assigneeName: assignee ? `${assignee.firstName} ${assignee.lastName}`.trim() : null
+						assigneeName: assignee ? displayName(assignee) : null
 					}
 				: null,
 			notes: enrichedNotes,
@@ -423,6 +448,111 @@ export const importMembers = mutation({
 			}
 		}
 		return { joined, invited, skipped };
+	}
+});
+
+/**
+ * Change a member's church role — the in-app role CRUD (ported from OCC's
+ * Timii workspace-roles model, plus the self-change guard it lacked).
+ * Admin-only, and you can't change your own role — together those two
+ * guards make "no admins left" structurally impossible: every demotion is
+ * performed by an admin who isn't the target, so an admin always remains.
+ */
+export const setMemberRole = mutation({
+	args: {
+		membershipId: v.id('memberships'),
+		role: v.union(v.literal('member'), v.literal('leader'), v.literal('staff'), v.literal('admin'))
+	},
+	handler: async (ctx, { membershipId, role }) => {
+		const staff = await requireChurchStaff(ctx);
+		if (!staff) throw new Error('Unauthorized');
+		if (staff.membership.role !== 'admin') {
+			throw new Error('Unauthorized: church admin access required');
+		}
+
+		const target = await ctx.db.get(membershipId);
+		if (!target || target.churchId !== staff.membership.churchId) {
+			throw new Error('Membership not found');
+		}
+		if (target.userId === staff.user._id) {
+			throw new Error("You can't change your own role");
+		}
+		if (target.role === role) return membershipId;
+
+		// A role grant is an act of trust — it verifies a pending membership.
+		await ctx.db.patch(membershipId, { role, status: 'verified' });
+
+		const church = await ctx.db.get(staff.membership.churchId);
+		await notify(ctx, {
+			recipientId: target.userId,
+			type: 'role-changed',
+			title: `You're now ${role === 'admin' ? 'an admin' : `a ${role}`} at ${church?.name ?? 'your church'}`,
+			actionUrl: role === 'admin' || role === 'staff' ? '/admin' : '/'
+		});
+		return membershipId;
+	}
+});
+
+/**
+ * Edit a member's details from the triage table. Staff-level (it's
+ * clerical care work, like verifying): the display name lives on the
+ * users row — Clerk only writes names at account creation, so a staff
+ * correction sticks — and ministry lives on the membership. Email stays
+ * Clerk-owned identity and is deliberately not editable.
+ */
+export const updateMember = mutation({
+	args: {
+		membershipId: v.id('memberships'),
+		firstName: v.optional(v.string()),
+		lastName: v.optional(v.string()),
+		ministry: v.optional(v.string())
+	},
+	handler: async (ctx, { membershipId, firstName, lastName, ministry }) => {
+		const staff = await requireChurchStaff(ctx);
+		if (!staff) throw new Error('Unauthorized');
+		const target = await ctx.db.get(membershipId);
+		if (!target || target.churchId !== staff.membership.churchId) {
+			throw new Error('Membership not found');
+		}
+
+		if (firstName !== undefined || lastName !== undefined) {
+			const user = await ctx.db.get(target.userId);
+			if (!user) throw new Error('User not found');
+			await ctx.db.patch(target.userId, {
+				...(firstName !== undefined ? { firstName: firstName.trim() } : {}),
+				...(lastName !== undefined ? { lastName: lastName.trim() } : {}),
+				updatedAt: Date.now()
+			});
+		}
+		if (ministry !== undefined) {
+			await ctx.db.patch(membershipId, { ministry: ministry.trim() || undefined });
+		}
+		return membershipId;
+	}
+});
+
+/**
+ * Remove a member from the church. Admin-only; you can't remove yourself,
+ * so (with setMemberRole's guards) an admin always remains. The user row
+ * survives — only the membership goes.
+ */
+export const removeMember = mutation({
+	args: { membershipId: v.id('memberships') },
+	handler: async (ctx, { membershipId }) => {
+		const staff = await requireChurchStaff(ctx);
+		if (!staff) throw new Error('Unauthorized');
+		if (staff.membership.role !== 'admin') {
+			throw new Error('Unauthorized: church admin access required');
+		}
+		const target = await ctx.db.get(membershipId);
+		if (!target || target.churchId !== staff.membership.churchId) {
+			throw new Error('Membership not found');
+		}
+		if (target.userId === staff.user._id) {
+			throw new Error("You can't remove yourself");
+		}
+		await ctx.db.delete(membershipId);
+		return null;
 	}
 });
 

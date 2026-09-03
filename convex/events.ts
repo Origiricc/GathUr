@@ -2,7 +2,7 @@ import { v } from 'convex/values';
 import { internalMutation, mutation, query } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
-import { getMember, requireMember } from './helpers';
+import { getMember, requireMember, displayName } from './helpers';
 
 // A gathering without an explicit end is treated as 2h long, and we wait
 // another hour after the end before settling RSVPs so late check-ins count.
@@ -116,7 +116,7 @@ export const detail = query({
 			if (!user) continue;
 			attendees.push({
 				userId: user._id,
-				name: `${user.firstName} ${user.lastName}`.trim(),
+				name: displayName(user),
 				imageUrl: user.imageUrl,
 				status: row.status
 			});
@@ -384,7 +384,7 @@ export const peopleYouMet = query({
 			const event = await ctx.db.get(entry.lastEventId);
 			rows.push({
 				userId,
-				name: `${user.firstName} ${user.lastName}`.trim(),
+				name: displayName(user),
 				imageUrl: user.imageUrl,
 				sharedCount: entry.sharedCount,
 				lastMetAt: entry.lastMetAt,

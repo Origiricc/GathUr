@@ -143,7 +143,88 @@ describe('connections', () => {
 	});
 });
 
+describe('connections.profile', () => {
+	test('returns shared profile fields, connection state, and reasons', async () => {
+		const t = setup();
+		const { anna, ben } = await seedTwoMembers(t);
+		await seedProfile(t, anna.userId, { interests: ['hiking'], lifeStage: 'young-adult' });
+		await t.run(async (ctx) =>
+			ctx.db.insert('profiles', {
+				userId: ben.userId,
+				bio: 'New to town, loves trails.',
+				interests: ['hiking'],
+				lifeStage: 'young-adult',
+				lookingFor: ['friends'],
+				updatedAt: 1
+			})
+		);
+
+		const profile = await anna.as.query(api.connections.profile, { userId: ben.userId });
+		expect(profile).toMatchObject({
+			name: 'ben Test',
+			bio: 'New to town, loves trails.',
+			lifeStage: 'young-adult',
+			email: null, // showContact defaults off
+			connection: { status: 'none' }
+		});
+		expect(profile?.reasons).toContain('Same life stage');
+
+		const connectionId = await anna.as.mutation(api.connections.request, {
+			recipientId: ben.userId
+		});
+		const asBen = await ben.as.query(api.connections.profile, { userId: anna.userId });
+		expect(asBen?.connection).toMatchObject({ status: 'pending-incoming', connectionId });
+	});
+
+	test('hides private profiles and gates connections-only ones', async () => {
+		const t = setup();
+		const { anna, ben } = await seedTwoMembers(t);
+		await seedProfile(t, ben.userId, {
+			privacy: { visibility: 'private', recommendable: false, showContact: false }
+		});
+		await expect(
+			anna.as.query(api.connections.profile, { userId: ben.userId })
+		).resolves.toBeNull();
+
+		await t.run(async (ctx) => {
+			const profile = await ctx.db
+				.query('profiles')
+				.withIndex('by_userId', (q) => q.eq('userId', ben.userId))
+				.unique();
+			await ctx.db.patch(profile!._id, {
+				privacy: { visibility: 'connections', recommendable: true, showContact: true }
+			});
+		});
+		await expect(
+			anna.as.query(api.connections.profile, { userId: ben.userId })
+		).resolves.toBeNull();
+
+		const connectionId = await anna.as.mutation(api.connections.request, {
+			recipientId: ben.userId
+		});
+		await ben.as.mutation(api.connections.respond, { connectionId, accept: true });
+		const profile = await anna.as.query(api.connections.profile, { userId: ben.userId });
+		expect(profile?.connection.status).toBe('connected');
+		expect(profile?.email).toBe('ben@example.com'); // opted in
+	});
+});
+
 describe('matching', () => {
+	test('people in different declared age ranges are never suggested', async () => {
+		const t = setup();
+		const { church, anna, ben } = await seedTwoMembers(t);
+		const cara = await seedUser(t, 'cara');
+		await seedMembership(t, { userId: cara.userId, churchId: church });
+		await seedProfile(t, anna.userId, { interests: ['hiking'], lifeStage: 'young-adult' });
+		// ben: same interests, different age range → excluded.
+		await seedProfile(t, ben.userId, { interests: ['hiking'], lifeStage: 'senior' });
+		// cara: same interests, no declared life stage → allowed, ranked by the rest.
+		await seedProfile(t, cara.userId, { interests: ['hiking'] });
+
+		const recs = await anna.as.query(api.matching.forMe, { now: Date.now() });
+		expect(recs?.people.map((p) => p.userId)).toEqual([cara.userId]);
+	});
+
 	test('forMe scores people with transparent reasons', async () => {
 		const t = setup();
 		const { anna, ben } = await seedTwoMembers(t);

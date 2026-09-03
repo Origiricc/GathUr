@@ -1,7 +1,24 @@
 import { v } from 'convex/values';
-import { mutation, query } from './_generated/server';
+import { internalMutation, mutation, query } from './_generated/server';
 import { getCurrentUser, isPlatformAdmin, requirePlatformAdmin } from './helpers';
 import { uniqueChurchSlug } from './churches';
+
+/**
+ * Ops escape hatch (CLI only): grant or revoke platform super-admin.
+ * `npx convex run platform:setPlatformRoleByEmail '{"email":"…","superAdmin":true}'`
+ */
+export const setPlatformRoleByEmail = internalMutation({
+	args: { email: v.string(), superAdmin: v.boolean() },
+	handler: async (ctx, { email, superAdmin }) => {
+		const user = await ctx.db
+			.query('users')
+			.withIndex('by_email', (q) => q.eq('email', email.trim().toLowerCase()))
+			.first();
+		if (!user) throw new Error('No user with that email');
+		await ctx.db.patch(user._id, { platformRole: superAdmin ? 'super-admin' : undefined });
+		return { userId: user._id, platformRole: superAdmin ? 'super-admin' : null };
+	}
+});
 
 /** Is the signed-in user a platform (super) admin? */
 export const amI = query({
@@ -32,6 +49,7 @@ export const listChurches = query({
 				slug: church.slug,
 				city: church.city,
 				state: church.state,
+				website: church.website,
 				status: church.status ?? 'launched',
 				isActive: church.isActive,
 				memberCount: memberships.length,
@@ -87,6 +105,42 @@ export const createChurch = mutation({
 				createdAt: now
 			});
 		}
+		return churchId;
+	}
+});
+
+/**
+ * Platform: edit a church's core details or (de)activate it. The slug is
+ * deliberately immutable — join QR codes and links must keep working after
+ * a rename. Deactivating hides the church from listings and blocks joins;
+ * it never deletes data.
+ */
+export const updateChurch = mutation({
+	args: {
+		churchId: v.id('churches'),
+		name: v.optional(v.string()),
+		city: v.optional(v.string()),
+		state: v.optional(v.string()),
+		website: v.optional(v.string()),
+		isActive: v.optional(v.boolean())
+	},
+	handler: async (ctx, { churchId, ...fields }) => {
+		const admin = await requirePlatformAdmin(ctx);
+		if (!admin) throw new Error('Unauthorized');
+		const church = await ctx.db.get(churchId);
+		if (!church) throw new Error('Church not found');
+
+		const patch: Record<string, string | boolean | undefined> = {};
+		if (fields.name !== undefined) {
+			const name = fields.name.trim();
+			if (!name) throw new Error('Church name is required');
+			patch.name = name;
+		}
+		if (fields.city !== undefined) patch.city = fields.city.trim() || undefined;
+		if (fields.state !== undefined) patch.state = fields.state.trim() || undefined;
+		if (fields.website !== undefined) patch.website = fields.website.trim() || undefined;
+		if (fields.isActive !== undefined) patch.isActive = fields.isActive;
+		await ctx.db.patch(churchId, patch);
 		return churchId;
 	}
 });

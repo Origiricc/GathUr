@@ -2,6 +2,7 @@
 	import { useAuth, useQuery } from 'convex-svelte';
 	import { SignUpButton, Show } from 'svelte-clerk';
 	import { resolve } from '$app/paths';
+	import { DURATION, reveal, stagger } from '$lib/motion';
 	import { api } from '$convex/api';
 	import IconUsers from '@tabler/icons-svelte/icons/users';
 	import IconUsersGroup from '@tabler/icons-svelte/icons/users-group';
@@ -42,39 +43,41 @@
 
 <Show when="signed-out">
 	<section class="mx-auto max-w-2xl py-16 text-center">
-		<h1 class="font-display text-5xl font-bold text-primary">Find your people.</h1>
-		<p class="mt-6 text-lg text-base-content/70">
+		<h1
+			class="font-display text-5xl font-bold text-primary"
+			data-occ-reveal
+			use:reveal={{ once: true, duration: DURATION.cinematic, distance: 24 }}
+		>
+			Find your people.
+		</h1>
+		<p
+			class="mt-6 text-lg text-base-content/70"
+			data-occ-reveal
+			use:reveal={{ once: true, delay: 80, duration: DURATION.cinematic, distance: 24 }}
+		>
 			GathUr helps every visitor become a member, every member find community, and every church
 			become a place where no one feels alone.
 		</p>
-		<div class="mt-8">
+		<div
+			class="mt-8"
+			data-occ-reveal
+			use:reveal={{ once: true, delay: 160, duration: DURATION.cinematic, distance: 24 }}
+		>
 			<SignUpButton mode="modal" class="btn btn-lg btn-primary">Get started</SignUpButton>
 		</div>
 		<div class="mt-16 grid grid-cols-2 gap-4 text-left sm:grid-cols-4">
-			<div class="card bg-base-200">
-				<div class="card-body items-center p-4 text-center">
-					<IconUsers class="text-primary" size={28} />
-					<p class="text-sm font-medium">Meet people</p>
+			{#each [{ icon: IconUsers, label: 'Meet people' }, { icon: IconUsersGroup, label: 'Find a group' }, { icon: IconCalendarEvent, label: 'Attend gatherings' }, { icon: IconHeartHandshake, label: 'Get involved' }] as item, i (item.label)}
+				<div
+					class="card bg-base-200"
+					data-occ-reveal
+					use:reveal={{ once: true, delay: stagger(i, 60, 280), distance: 12 }}
+				>
+					<div class="card-body items-center p-4 text-center">
+						<item.icon class="text-primary" size={28} />
+						<p class="text-sm font-medium">{item.label}</p>
+					</div>
 				</div>
-			</div>
-			<div class="card bg-base-200">
-				<div class="card-body items-center p-4 text-center">
-					<IconUsersGroup class="text-primary" size={28} />
-					<p class="text-sm font-medium">Find a group</p>
-				</div>
-			</div>
-			<div class="card bg-base-200">
-				<div class="card-body items-center p-4 text-center">
-					<IconCalendarEvent class="text-primary" size={28} />
-					<p class="text-sm font-medium">Attend gatherings</p>
-				</div>
-			</div>
-			<div class="card bg-base-200">
-				<div class="card-body items-center p-4 text-center">
-					<IconHeartHandshake class="text-primary" size={28} />
-					<p class="text-sm font-medium">Get involved</p>
-				</div>
-			</div>
+			{/each}
 		</div>
 	</section>
 </Show>
@@ -173,7 +176,12 @@
 									{/if}
 								</div>
 								<div class="min-w-0">
-									<p class="truncate font-semibold">{person.name}</p>
+									<a
+										href={resolve('/people/[userId]', { userId: person.userId })}
+										class="block truncate font-semibold hover:text-primary"
+									>
+										{person.name}
+									</a>
 									<p class="truncate text-sm text-base-content/60">
 										{person.sharedCount > 1
 											? `${person.sharedCount} gatherings together`

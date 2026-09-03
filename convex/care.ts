@@ -2,7 +2,7 @@ import { v } from 'convex/values';
 import { internalMutation, mutation, query } from './_generated/server';
 import type { QueryCtx, MutationCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
-import { requireChurchStaff } from './helpers';
+import { requireChurchStaff, displayName } from './helpers';
 import { notify } from './notifications';
 
 /**
@@ -98,6 +98,7 @@ export async function computeChurchHealth(
 			role: membership.role,
 			status: membership.status,
 			source: membership.source,
+			ministry: membership.ministry ?? null,
 			joinedAt: membership.joinedAt,
 			firstName: user.firstName,
 			lastName: user.lastName,
@@ -139,8 +140,8 @@ export const openFollowUps = query({
 			const assignee = followUp.assignedToId ? await ctx.db.get(followUp.assignedToId) : null;
 			rows.push({
 				...followUp,
-				subjectName: subject ? `${subject.firstName} ${subject.lastName}`.trim() : 'Unknown',
-				assigneeName: assignee ? `${assignee.firstName} ${assignee.lastName}`.trim() : null
+				subjectName: subject ? displayName(subject) : 'Unknown',
+				assigneeName: assignee ? displayName(assignee) : null
 			});
 		}
 		return rows;
@@ -195,7 +196,7 @@ export const createFollowUp = mutation({
 			await notify(ctx, {
 				recipientId: args.assignedToId,
 				type: 'follow-up-assigned',
-				title: `Follow up with ${subject ? `${subject.firstName} ${subject.lastName}`.trim() : 'a member'}`,
+				title: `Follow up with ${subject ? displayName(subject) : 'a member'}`,
 				body: args.note,
 				actionUrl: '/admin'
 			});
