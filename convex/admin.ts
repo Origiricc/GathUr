@@ -1,8 +1,33 @@
 import { v } from 'convex/values';
-import { mutation, query } from './_generated/server';
+import { internalMutation, mutation, query } from './_generated/server';
 import { requireChurchStaff } from './helpers';
 import { computeChurchHealth } from './care';
 import { notify } from './notifications';
+
+/**
+ * Ops escape hatch (CLI only): set a member's church role by email.
+ * `npx convex run admin:setRoleByEmail '{"email":"…","role":"admin"}'`
+ */
+export const setRoleByEmail = internalMutation({
+	args: {
+		email: v.string(),
+		role: v.union(v.literal('member'), v.literal('leader'), v.literal('staff'), v.literal('admin'))
+	},
+	handler: async (ctx, { email, role }) => {
+		const user = await ctx.db
+			.query('users')
+			.withIndex('by_email', (q) => q.eq('email', email.trim().toLowerCase()))
+			.first();
+		if (!user) throw new Error('No user with that email');
+		const membership = await ctx.db
+			.query('memberships')
+			.withIndex('by_userId', (q) => q.eq('userId', user._id))
+			.first();
+		if (!membership) throw new Error('That user has no church membership');
+		await ctx.db.patch(membership._id, { role, status: 'verified' });
+		return { membershipId: membership._id, role };
+	}
+});
 
 /**
  * The admin dashboard in one query: community-health counts plus enriched
