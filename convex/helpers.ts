@@ -32,6 +32,15 @@ export async function requireUser(ctx: Ctx): Promise<Doc<'users'>> {
 	return user;
 }
 
+/**
+ * A user's display name — some accounts arrive from Clerk with no name at
+ * all, so fall back to the email handle rather than rendering nothing.
+ */
+export function displayName(user: Pick<Doc<'users'>, 'firstName' | 'lastName' | 'email'>) {
+	const name = `${user.firstName} ${user.lastName}`.trim();
+	return name || user.email.split('@')[0] || 'Member';
+}
+
 /** Fetch a document by id or throw with a readable label. */
 export async function getOrThrow<T extends TableNames>(
 	ctx: Ctx,

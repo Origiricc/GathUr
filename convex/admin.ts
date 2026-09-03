@@ -1,6 +1,6 @@
 import { v } from 'convex/values';
 import { internalMutation, mutation, query } from './_generated/server';
-import { requireChurchStaff } from './helpers';
+import { requireChurchStaff, displayName } from './helpers';
 import { computeChurchHealth } from './care';
 import { notify } from './notifications';
 
@@ -153,7 +153,7 @@ export const thisWeek = query({
 			if (!user) continue;
 			items.push({
 				type: 'new-member',
-				label: `${user.firstName} ${user.lastName}`.trim() + ' joined',
+				label: displayName(user) + ' joined',
 				at: membership.joinedAt
 			});
 		}
@@ -200,7 +200,7 @@ export const thisWeek = query({
 			const subject = await ctx.db.get(followUp.subjectId);
 			items.push({
 				type: 'follow-up',
-				label: `Follow-up completed for ${subject ? `${subject.firstName} ${subject.lastName}`.trim() : 'a member'}`,
+				label: `Follow-up completed for ${subject ? displayName(subject) : 'a member'}`,
 				at: followUp.completedAt
 			});
 		}
@@ -284,7 +284,7 @@ export const memberJourney = query({
 				_id: note._id,
 				body: note.body,
 				createdAt: note.createdAt,
-				authorName: author ? `${author.firstName} ${author.lastName}`.trim() : 'Staff'
+				authorName: author ? displayName(author) : 'Staff'
 			});
 		}
 		enrichedNotes.sort((a, b) => b.createdAt - a.createdAt);
@@ -314,7 +314,7 @@ export const memberJourney = query({
 		return {
 			userId,
 			membershipId: membership._id,
-			name: `${user.firstName} ${user.lastName}`.trim(),
+			name: displayName(user),
 			email: user.email,
 			imageUrl: user.imageUrl,
 			role: membership.role,
@@ -356,7 +356,7 @@ export const memberJourney = query({
 						_id: openFollowUp._id,
 						reason: openFollowUp.reason,
 						createdAt: openFollowUp.createdAt,
-						assigneeName: assignee ? `${assignee.firstName} ${assignee.lastName}`.trim() : null
+						assigneeName: assignee ? displayName(assignee) : null
 					}
 				: null,
 			notes: enrichedNotes,

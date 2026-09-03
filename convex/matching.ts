@@ -2,7 +2,7 @@ import { v } from 'convex/values';
 import { query } from './_generated/server';
 import type { QueryCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
-import { getMember, requireChurchStaff } from './helpers';
+import { getMember, requireChurchStaff, displayName } from './helpers';
 import { getConnectionSets } from './connections';
 
 /**
@@ -163,7 +163,7 @@ export const forMe = query({
 			if (score <= 0) continue;
 			people.push({
 				userId: user._id,
-				name: `${user.firstName} ${user.lastName}`.trim(),
+				name: displayName(user),
 				imageUrl: user.imageUrl,
 				score,
 				reasons
@@ -323,8 +323,8 @@ export const recommendedActions = query({
 				pairs.push({
 					requesterId: a.user._id,
 					recipientId: b.user._id,
-					aName: `${a.user.firstName} ${a.user.lastName}`.trim(),
-					bName: `${b.user.firstName} ${b.user.lastName}`.trim(),
+					aName: displayName(a.user),
+					bName: displayName(b.user),
 					score,
 					reasons
 				});

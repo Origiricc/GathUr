@@ -2,7 +2,13 @@ import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import type { QueryCtx, MutationCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
-import { getMember, getVerifiedMembership, requireChurchStaff, requireMember } from './helpers';
+import {
+	getMember,
+	getVerifiedMembership,
+	requireChurchStaff,
+	requireMember,
+	displayName
+} from './helpers';
 import { notify } from './notifications';
 // Cycle with matching.ts is safe: each side only calls the other inside
 // handlers, never at module init.
@@ -70,7 +76,7 @@ export const request = mutation({
 			status: 'pending',
 			createdAt: Date.now()
 		});
-		const name = `${member.user.firstName} ${member.user.lastName}`.trim();
+		const name = displayName(member.user);
 		await notify(ctx, {
 			recipientId,
 			type: 'connection-request',
@@ -96,7 +102,7 @@ export const respond = mutation({
 		}
 		await ctx.db.patch(connectionId, { status: accept ? 'accepted' : 'declined' });
 		if (accept) {
-			const name = `${member.user.firstName} ${member.user.lastName}`.trim();
+			const name = displayName(member.user);
 			await notify(ctx, {
 				recipientId: connection.requesterId,
 				type: 'connection-accepted',
@@ -134,8 +140,7 @@ export const introduce = mutation({
 			createdAt: Date.now()
 		});
 		const [userA, userB] = [await ctx.db.get(args.requesterId), await ctx.db.get(args.recipientId)];
-		const nameOf = (u: Doc<'users'> | null) =>
-			u ? `${u.firstName} ${u.lastName}`.trim() : 'someone';
+		const nameOf = (u: Doc<'users'> | null) => (u ? displayName(u) : 'someone');
 		await notify(ctx, {
 			recipientId: args.recipientId,
 			type: 'introduction',
@@ -181,7 +186,7 @@ export const mine = query({
 			rows.push({
 				connectionId: connection._id,
 				userId: otherId,
-				name: `${other.firstName} ${other.lastName}`.trim(),
+				name: displayName(other),
 				imageUrl: other.imageUrl,
 				introduced: connection.introducedBy != null,
 				since: connection.createdAt
@@ -212,9 +217,9 @@ export const pendingForMe = query({
 			rows.push({
 				connectionId: connection._id,
 				userId: requester._id,
-				name: `${requester.firstName} ${requester.lastName}`.trim(),
+				name: displayName(requester),
 				imageUrl: requester.imageUrl,
-				introducedBy: introducer ? `${introducer.firstName} ${introducer.lastName}`.trim() : null,
+				introducedBy: introducer ? displayName(introducer) : null,
 				requestedAt: connection.createdAt
 			});
 		}
@@ -316,7 +321,7 @@ export const profile = query({
 		return {
 			userId,
 			isSelf,
-			name: `${user.firstName} ${user.lastName}`.trim(),
+			name: displayName(user),
 			imageUrl: user.imageUrl,
 			email: isSelf || (profileDoc?.privacy?.showContact ?? false) ? user.email : null,
 			role: membership.role,
@@ -370,7 +375,7 @@ export const directory = query({
 
 			rows.push({
 				userId: user._id,
-				name: `${user.firstName} ${user.lastName}`.trim(),
+				name: displayName(user),
 				imageUrl: user.imageUrl,
 				email: (profile?.privacy?.showContact ?? false) ? user.email : null,
 				lifeStage: profile?.lifeStage ?? null,

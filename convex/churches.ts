@@ -1,7 +1,7 @@
 import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
-import { getCurrentUser, requireChurchStaff, requireUser } from './helpers';
+import { getCurrentUser, requireChurchStaff, requireUser, displayName } from './helpers';
 import { notify } from './notifications';
 
 /** Slug from a church name, suffixed until unique. */
@@ -122,7 +122,7 @@ export const join = mutation({
 			const staffRows = memberships
 				.filter((m) => m.role === 'admin' || m.role === 'staff')
 				.slice(0, 10);
-			const name = `${user.firstName} ${user.lastName}`.trim() || user.email;
+			const name = displayName(user);
 			for (const staff of staffRows) {
 				await notify(ctx, {
 					recipientId: staff.userId,

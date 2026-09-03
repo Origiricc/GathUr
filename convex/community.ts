@@ -2,11 +2,11 @@ import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import type { QueryCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
-import { getMember, requireChurchStaff, requireMember } from './helpers';
+import { getMember, requireChurchStaff, requireMember, displayName } from './helpers';
 
 async function authorName(ctx: QueryCtx, userId: Id<'users'>) {
 	const user = await ctx.db.get(userId);
-	return user ? `${user.firstName} ${user.lastName}`.trim() : 'Someone';
+	return user ? displayName(user) : 'Someone';
 }
 
 /** Spontaneous community posts, newest first. */
@@ -27,7 +27,7 @@ export const posts = query({
 				_id: post._id,
 				body: post.body,
 				createdAt: post.createdAt,
-				authorName: author ? `${author.firstName} ${author.lastName}`.trim() : 'Someone',
+				authorName: author ? displayName(author) : 'Someone',
 				authorImageUrl: author?.imageUrl,
 				isMine: post.authorId === member.user._id
 			});

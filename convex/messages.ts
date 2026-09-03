@@ -2,7 +2,7 @@ import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import type { MutationCtx, QueryCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
-import { getMember, requireMember } from './helpers';
+import { getMember, requireMember, displayName } from './helpers';
 import { notify } from './notifications';
 
 // Messaging (Textii port). Every thread type is participant-gated —
@@ -254,8 +254,7 @@ export const send = mutation({
 
 		const now = Date.now();
 		const previousActivity = thread.updatedAt;
-		const authorName =
-			`${member.user.firstName} ${member.user.lastName}`.trim() || member.user.email;
+		const authorName = displayName(member.user);
 		const messageId = await ctx.db.insert('threadMessages', {
 			threadId,
 			churchId: thread.churchId,
@@ -320,7 +319,7 @@ async function describeThread(
 	const other = participants.find((p) => p.userId !== viewerId);
 	const user = other ? await ctx.db.get(other.userId) : null;
 	return {
-		title: user ? `${user.firstName} ${user.lastName}`.trim() || user.email : 'Direct message',
+		title: user ? displayName(user) : 'Direct message',
 		kind: 'DM',
 		otherUserId: other?.userId ?? null
 	};
