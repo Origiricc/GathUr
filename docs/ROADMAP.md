@@ -1,61 +1,44 @@
 # GathUr — Roadmap
 
-_Where we're going, in priority order. Last updated 2026-09-01. For what already exists, see [STATUS.md](./STATUS.md)._
+_Where we're going, in priority order. Last updated 2026-09-02. For what already exists, see [STATUS.md](./STATUS.md)._
 
-## Now — hygiene
+## Shipped 2026-09-02 (the big push)
 
-1. **Commit the work.** Everything is untracked on `staging`; one bad checkout loses the app. `.gitignore` already protects `.env.local`.
-2. **Real tests.** `convex-test` over the auth gates, invitation accept (no-downgrade rule), follow-up lifecycle, verifyMember church-boundary check. The scaffold example tests can go with the demo routes.
+Worked the previous roadmap top to bottom:
 
-## Next — finish the groups + events slice
+1. **Hygiene** — everything committed; `convex-test` suite (58 tests) over the auth gates, invitation accept, follow-up lifecycle, verifyMember boundary, RSVP machine, and all the new surfaces; scaffold demo routes/tests replaced with a real smoke e2e.
+2. **Groups + events slice finished** — hourly cron settles ended gatherings (`checked_in→attended`, `going→no_show` when attendance was tracked); "People you met" from shared check-ins on the home page; **Drifting** derived from attendance history; Group Health badges; This Week feed; Community Impact deltas.
+3. **Connection loop** — connections (request/accept/decline, staff introductions with `introducedBy`), privacy-honoring directory, **transparent matching engine v1** (every rec shows why) powering home/onboarding/admin Recommended Actions, notifications inbox + bell, posts + prayer + announcements at `/community`.
+4. **Onboarding completion** — 5 steps (About You + Privacy + first recommendations), team-invite ministry/responsibilities capture, church setup wizard at `/admin/settings`, **verification flipped on** (per-church opt-out), per-church join link/QR at `/join/[slug]`.
+5. **Admin depth** — Connection Progress line chart (30d/90d/1y), New Attendee Journey pipeline with next-best-action nudges at `/admin/journey/[userId]`, CSV member import.
+6. **White-label ring 2 (first cut)** — per-church branding (name/logo/color/tagline/attribution) applied app-wide.
 
-**Shipped 2026-09-01 (v1):** `/groups` (browse with audience filter, Start a Group form, public instant-join vs private request-to-join, leader approval queue) and `/events` (upcoming gatherings, create form with capacity/waitlist, RSVP: Going / Interested / Can't go with waitlist + promotion, check-in backend). Groups/Events in the nav; home cards link through.
+## Now — remaining loose ends
 
-**Shipped 2026-09-01 (v2):** group detail pages (`/groups/[id]`: roster, leave, leader invite-members picker with the `direction: 'invited'` accept/decline flow on the Groups page, leader "Host a gathering" form, group gatherings list) and event detail pages (`/events/[id]`: full info, RSVP, "Who's coming" attendee list, self check-in button, and a host-only **check-in QR code** that prints/displays for the at-the-door flow).
+- **Responsibility-scoped admin views**: `memberships.responsibilities` is captured but not yet used to scope `/admin` (group leader → their groups; connections team → follow-ups).
+- **Event reminders**: notification type exists conceptually; needs a scheduled job that enqueues reminders for `going` RSVPs before start.
+- **Component/e2e coverage** for the new member surfaces (onboarding stepper, /people, /community).
 
-Still to do in this slice:
+## Launch checklist (when ready for a URL) — needs Connor's input
 
-- "People you met" derived from shared check-ins → post-gathering follow-up prompts (the attendee list on event pages is v1)
-- Auto-transition `going → attended`/`no_show` after events end (scheduled job)
-- **Unlocks on the admin side (now buildable)**: Drifting state (attendance history from check-ins), group health badges, This Week activity feed, Community Impact deltas.
-
-## Then — the connection loop
-
-- **Connections**: request/accept/decline, member directory honoring `profiles.privacy` (visibility + recommendable), introductions (`introducedBy`) for the leader "Introduce X to Y" action.
-- **Matching engine v1** (deliberately transparent, no AI): score by shared interests + life stage + looking-for overlap + shared groups/events; always render "why you may connect." Powers the member home ("Person to Meet / Group to Join / Gathering to Attend"), onboarding step 6–7 (first recommendations → first action), and admin Recommended Actions.
-- **Notifications inbox** + bell (schema ready; enqueue via the plain-function pattern from mutations: connection requests, group invites, event reminders, follow-up assignments).
-- **Posts & prayer requests** feeds ("Who's grabbing coffee after second service?"); announcements for church updates.
-
-## Onboarding completion
-
-- Member steps 4–5 UI: About You (availability, preferred activities, ministries) and Privacy preferences — backend already accepts all fields.
-- Team-member onboarding: capture ministry + responsibilities on invite accept; responsibility-scoped admin views (group leader → their group; connections team → follow-ups).
-- Church setup wizard: priorities, connection-rules settings UI, review screen ("imported members, groups, events, leaders, missing info").
-- **Flip verification on**: change `churches.join` to `status: 'pending'` (the `/admin` verify flow is already built); consider per-church setting.
-- QR entry: per-church join link/QR (`source: 'qr'`) for the Sunday-morning flow.
-
-## Admin depth
-
-- Connection Progress charts from `healthSnapshots` (30d/90d/1y) — data is accumulating via the daily cron since 2026-09-01.
-- New Attendee Journey per-person pipeline view (first visit → invite → group → gathering → connections → belonging) with "next best action" nudges ("hasn't been contacted in 7 days").
-- CSV member import (first cut of "Connect Church Data"; `memberships.source: 'import'`), then Planning Center / Church Center / Breeze / Subsplash integrations.
-
-## Launch checklist (when ready for a URL)
-
+- **Brand decision**: leaf/green mockup identity vs fire-cross/gold board — see [product/brand.md](./product/brand.md). Blocks favicon, logo, README rewrite.
 - `npx convex deploy` → production deployment; set `CLERK_JWT_ISSUER_DOMAIN` on it
 - Production Clerk instance with its own `convex` JWT template; swap `pk_test`/`sk_test`
 - Link Vercel project; set env vars; staging branch → preview, main → production (OCC convention)
-- Resolve the **brand decision** (leaf/green mockup identity vs fire-cross/gold board — see [product/brand.md](./product/brand.md)); replace the scaffold Svelte favicon; rewrite README
-- Transactional email (Resend, per OCC pattern) so invitations actually notify people instead of waiting for sign-in
+- Transactional email (Resend, per OCC pattern) so invitations/notifications reach people who haven't signed in — CSV-imported invitees especially
+- Replace the scaffold Svelte favicon; rewrite README
 
-## Platform & white-label (the three rings)
+## Then — integrations & platform
 
-1. **Multi-church platform** — live: super admins create/launch churches at `/platform`.
-2. **White-label per church** — `churches.branding` exists; build per-church theming (logo, colors, display name, hide-attribution) into the member experience, then custom domains.
-3. **Beyond churches** — generalize "church" to any community that gathers (the schema already treats it as a pure tenancy boundary; the rename is cosmetic). Same engine: verification, profiles, matching, gatherings, follow-ups, community health.
+- **Connect Church Data v2**: Planning Center / Church Center / Breeze / Subsplash sync (CSV import shipped as v1).
+- **White-label ring 2 finish**: per-church custom domains; logo upload via Convex file storage (currently URL-only).
+- **Ring 3 — beyond churches**: generalize "church" to any community that gathers (schema already treats it as pure tenancy; the rename is cosmetic).
+- Admin: Recommended Actions beyond introductions (invite-to-group, recommend-gathering with one-tap), journey "assigned leader" surfaced on the triage table.
 
 ## Scaling notes (not urgent)
 
-- `computeChurchHealth` does per-member index lookups — fine to a few hundred members per church; beyond that, denormalize counters (update in the same mutations) or adopt `@convex-dev/aggregate`.
+- `computeChurchHealth` does per-member index lookups (now incl. last check-in) — fine to a few hundred members per church; beyond that, denormalize counters or adopt `@convex-dev/aggregate`.
+- `matching.forMe` scores up to 200 candidates with per-candidate lookups — cap or precompute when churches pass ~500 members.
 - `admin.dashboard` returns full member rows — paginate past ~500 members.
-- Clerk→users sync happens only at sign-in (`ensureUserExists`); add Clerk webhooks when profile changes need to propagate without a visit.
+- Clerk→users sync happens only at sign-in; add Clerk webhooks when profile changes need to propagate without a visit.
+- `finalizePastEvents` processes 100 events per run — schedule continuation batches if a church ever hosts more simultaneously.

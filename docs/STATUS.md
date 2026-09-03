@@ -1,10 +1,10 @@
 # GathUr — Build Status
 
-_What exists and how it fits together. Last updated 2026-09-01. For what's next, see [ROADMAP.md](./ROADMAP.md)._
+_What exists and how it fits together. Last updated 2026-09-02. For what's next, see [ROADMAP.md](./ROADMAP.md)._
 
 ## Stack
 
-SvelteKit 2 + Svelte 5 (runes) · TailwindCSS 4 + DaisyUI 5 + Bits UI · Convex (real-time backend) + convex-svelte · Clerk (svelte-clerk) · @tabler/icons-svelte (deep imports only — the barrel breaks Vite 8 SSR) · qrcode (event check-in QRs) · Vitest + Playwright · pnpm · adapter-vercel.
+SvelteKit 2 + Svelte 5 (runes) · TailwindCSS 4 + DaisyUI 5 + Bits UI · Convex (real-time backend) + convex-svelte · Clerk (svelte-clerk) · @tabler/icons-svelte (deep imports only — the barrel breaks Vite 8 SSR) · qrcode (event check-in + church join QRs) · Vitest (+ convex-test, edge-runtime) + Playwright · pnpm · adapter-vercel.
 
 Follows the **OCC single-project conventions** (see the OCC monorepo's `CLAUDE.md` and `docs/single-project/`), with one deviation: there is **no `svelte.config.js`** — SvelteKit config (adapter, `$convex` alias, runes mode) lives inline in [`vite.config.ts`](../vite.config.ts) via `sveltekit({...})` (supported since kit 2.62).
 
@@ -12,62 +12,69 @@ Follows the **OCC single-project conventions** (see the OCC monorepo's `CLAUDE.m
 
 - **Convex dev deployment**: `valiant-goat-615` (team `origiri5272`, project `gathur`). `npx convex dev` to run; schema auto-deploys on save.
 - **Auth chain**: Clerk JWT template named `convex` (`aud: "convex"`) → `CLERK_JWT_ISSUER_DOMAIN` set on the Convex deployment → [`convex/auth.config.ts`](../convex/auth.config.ts) validates. Frontend: `setupConvex()` in the root layout + [`ConvexClerkAuth.svelte`](../src/lib/components/ConvexClerkAuth.svelte) bridges Clerk→Convex via convex-svelte's first-class `setupAuth()`. [`EnsureUser.svelte`](../src/lib/components/EnsureUser.svelte) upserts the `users` row once Convex confirms the token (re-runs on account switch).
-- **Theme**: `gathur` DaisyUI 5 light theme in [`src/routes/layout.css`](../src/routes/layout.css) — forest green primary, warm cream base, sage secondary, gold accent, `font-display` serif utility. Matches the product mockups' identity (`@tailwindcss/forms` removed — it fights DaisyUI inputs).
+- **Theme**: `gathur` DaisyUI 5 light theme in [`src/routes/layout.css`](../src/routes/layout.css) — forest green primary, warm cream base, sage secondary, gold accent, `font-display` serif utility. Per-church **white-label** overrides (name, logo, primary color, tagline, attribution) applied app-wide by [`BrandedShell.svelte`](../src/lib/components/BrandedShell.svelte) from `churches.branding`.
 - **Env**: `.env.local` (never committed) holds Clerk + Convex keys; `.env.example` is the committed template. Platform keys live in `~/Desktop/OCC/OCCDocuments/`.
 
 ## Data model (`convex/schema/`)
 
 Modular domain schemas merged in [`schema.ts`](../convex/schema.ts). Every table hangs off `churchId` — the church is the tenancy boundary (and deliberately a generic "community" underneath, per the platform vision).
 
-| Domain        | Tables                                                    | Notes                                                                                                                                                                                                                                                   |
-| ------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| auth          | `users`                                                   | Keyed on Clerk `tokenIdentifier`; `platformRole: 'super-admin'` for platform operators                                                                                                                                                                  |
-| churches      | `churches`, `memberships`, `invitations`                  | Church has `status` (draft/launched), `priorities`, `connectionRules`, white-label `branding`. Membership: role (member/leader/staff/admin), verification status, `source`, `ministry`, `responsibilities`. Invitations matched by Clerk-verified email |
-| profiles      | `profiles`                                                | Matching inputs: interests, life stage, 7-value `lookingFor`, availability, preferred activities, ministries, `privacy` (visibility / recommendable / showContact)                                                                                      |
-| groups        | `groups`, `groupMembers`                                  | Member rows carry `status` + **`direction`** (requested vs invited — OCC circles pattern), role owner/leader/member, `audience` age-targeting                                                                                                           |
-| events        | `events`, `eventRsvps`, `eventCheckIns`                   | **8-state RSVP machine** (invited…no_show, from OCC Icii), capacity + waitlist, denormalized `currentReservations`, visibility enum, idempotent check-ins                                                                                               |
-| community     | `posts`, `prayerRequests`, `connections`, `announcements` | Connections carry `introducedBy` (attributable introductions); announcements are a bulletin board, not a feed                                                                                                                                           |
-| notifications | `notifications`                                           | Notifii-derived inbox with `by_recipient_read`                                                                                                                                                                                                          |
-| care          | `followUps`, `memberNotes`, `healthSnapshots`             | Follow-ups: assignable, typed reasons, open/completed/dismissed, one open per member. Snapshots written daily by cron                                                                                                                                   |
+| Domain        | Tables                                                    | Notes                                                                                                                                                                                                                                                       |
+| ------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| auth          | `users`                                                   | Keyed on Clerk `tokenIdentifier`; `platformRole: 'super-admin'` for platform operators                                                                                                                                                                      |
+| churches      | `churches`, `memberships`, `invitations`                  | Church has `status` (draft/launched), `priorities`, `connectionRules`, **`requireVerification`** (absent = required), white-label `branding`. Membership: role, verification status, `source`, `ministry`, `responsibilities`. Invitations matched by email |
+| profiles      | `profiles`                                                | Matching inputs: interests, life stage, 7-value `lookingFor`, availability, preferred activities, ministries, `privacy` (visibility / recommendable / showContact) — all now captured in onboarding                                                         |
+| groups        | `groups`, `groupMembers`                                  | Member rows carry `status` + **`direction`** (requested vs invited — OCC circles pattern), role owner/leader/member, `audience` age-targeting                                                                                                               |
+| events        | `events`, `eventRsvps`, `eventCheckIns`                   | **8-state RSVP machine**, capacity + waitlist, denormalized `currentReservations`, `finalizedAt` (post-event settling), check-ins indexed **by user** for attendance history                                                                                |
+| community     | `posts`, `prayerRequests`, `connections`, `announcements` | Connections carry `introducedBy` (attributable introductions); announcements are a bulletin board, not a feed                                                                                                                                               |
+| notifications | `notifications`                                           | Notifii-derived inbox with `by_recipient_read`; enqueued via plain-function `notify()`                                                                                                                                                                      |
+| care          | `followUps`, `memberNotes`, `healthSnapshots`             | Follow-ups: assignable (assignment notifies), typed reasons, one open per member. Snapshots daily by cron; now include `driftingMembers`                                                                                                                    |
 
-Key inherited decisions are recorded in [occ-ecosystem-reuse.md](./occ-ecosystem-reuse.md) — schemas and patterns were inherited from OCC primitives; packages and backend were deliberately not.
+Key inherited decisions are recorded in [occ-ecosystem-reuse.md](./occ-ecosystem-reuse.md).
 
 ## Backend functions (`convex/`)
 
-- [`helpers.ts`](../convex/helpers.ts) — `requireAuth`, `getCurrentUser`/`requireUser` (tokenIdentifier lookup), `getOrThrow`, `requireChurchStaff` (admin/staff gate), `isPlatformAdmin`/`requirePlatformAdmin` (explicit role + `@origiricc.tech` bootstrap), `getVerifiedMembership`
+- [`helpers.ts`](../convex/helpers.ts) — `requireAuth`, `getCurrentUser`/`requireUser`, `getOrThrow`, `requireChurchStaff`, `getMember`/`requireMember` (verified members), `isPlatformAdmin`/`requirePlatformAdmin`, `getVerifiedMembership`
 - [`users.ts`](../convex/users.ts) — `current`, `ensureUserExists` upsert
-- [`churches.ts`](../convex/churches.ts) — `list`, `myChurch` (membership+church join), `create` (creator becomes admin), `join` (currently auto-verified — the one TODO), `uniqueChurchSlug`
-- [`profiles.ts`](../convex/profiles.ts) — `mine`, `upsert` (all onboarding step 2–5 fields)
-- [`invitations.ts`](../convex/invitations.ts) — `forMe`, `accept` (never downgrades role), `invite`, `listForChurch`, `revoke`
-- [`admin.ts`](../convex/admin.ts) — `dashboard` (counts + enriched member rows with derived flags), `verifyMember`
-- [`care.ts`](../convex/care.ts) — `computeChurchHealth` (shared plain function; honors per-church `connectionRules`), follow-up lifecycle, `memberNotes`/`addMemberNote`, `healthTrend`, `snapshotAll`
-- [`platform.ts`](../convex/platform.ts) — `amI`, `listChurches`, `createChurch` (+ primary-admin invitation), `setChurchStatus`, `grantSuperAdmin`
-- [`groups.ts`](../convex/groups.ts) — `list` (member counts + my status), `create` (creator = approved owner), `join` (public → instant, private → pending request), `leave`, `detail` (roster + my standing), `joinRequests` + `respond` (leader approval queue), `invitableMembers` + `invite` (leader invites, `direction: 'invited'`), `myInvites` + `respondToInvite` (member accept/decline)
-- [`events.ts`](../convex/events.ts) — `upcoming` (hour-bucketed `now`, optional `groupId` filter, my RSVP + spots left), `detail` (attendee list, `canManage`), `create` (group events need leadership), `rsvp` (state machine: capacity → waitlist when enabled, freeing a spot promotes earliest waitlisted, counter maintained in-mutation), `checkIn` (idempotent; presence overrides capacity)
-- [`crons.ts`](../convex/crons.ts) — daily 08:00 UTC community-health snapshot (trend history accumulates from deploy day)
+- [`churches.ts`](../convex/churches.ts) — `list`, `myChurch`, `bySlug` (join-QR entry), `create`, `join` (**pending by default**, notifies staff; per-church opt-out; `source: 'qr'` supported), `updateSettings` (admin-only: priorities, connection rules, verification, launch status, branding — hex-validated color), `uniqueChurchSlug`
+- [`profiles.ts`](../convex/profiles.ts) — `mine`, `upsert` (all onboarding fields incl. privacy)
+- [`invitations.ts`](../convex/invitations.ts) — `forMe`, `accept` (never downgrades; captures team `ministry` + `responsibilities`), `invite`, `listForChurch`, `revoke`
+- [`connections.ts`](../convex/connections.ts) — `request`/`respond` (either-direction dedupe, church boundary), `introduce` (staff, attributable), `mine`, `pendingForMe`, `directory` (privacy-honoring), shared `getPair`/`getConnectionSets`
+- [`matching.ts`](../convex/matching.ts) — **transparent matching engine v1**: `scorePair` (shared interests, life stage, looking-for, shared groups/gatherings — every rec carries reasons), `forMe` (person/group/gathering for home + onboarding step 5), `recommendedActions` (admin introduce-pairs)
+- [`notifications.ts`](../convex/notifications.ts) — plain-function `notify()` + `inbox`, `unreadCount`, `markRead`, `markAllRead`. Enqueued from: connection request/accept, introductions, group invites/approvals, follow-up assignments, pending self-joins, member imports
+- [`community.ts`](../convex/community.ts) — posts (create/delete: author or staff), prayer requests (anonymous option, author marks answered), staff announcements
+- [`admin.ts`](../convex/admin.ts) — `dashboard`, `groupHealth` (High Demand / Growing / Needs Support / Stable + reason), `thisWeek` activity feed, `memberJourney` (six-stage pipeline + next-best-action nudge), `importMembers` (CSV first cut: existing accounts join as `source: 'import'`, unknown emails get invitations), `verifyMember`
+- [`care.ts`](../convex/care.ts) — `computeChurchHealth` (now derives **Drifting** from check-in history vs `driftingDays`; per-row `lastCheckInAt`), follow-up lifecycle, `memberNotes`/`addMemberNote`, `healthTrend`, `snapshotAll`
+- [`events.ts`](../convex/events.ts) — `upcoming`, `detail`, `create`, `rsvp` (capacity/waitlist machine), `checkIn`, **`finalizePastEvents`** (hourly cron: checked_in→attended; going→no_show when attendance was tracked, else attended), **`peopleYouMet`** (co-attendees from shared check-ins, minus connections/private profiles)
+- [`groups.ts`](../convex/groups.ts) — list/create/join/leave/detail, leader queues + invites (now notifying), `respondToInvite`
+- [`platform.ts`](../convex/platform.ts) — `amI`, `listChurches`, `createChurch`, `setChurchStatus`, `grantSuperAdmin`
+- [`crons.ts`](../convex/crons.ts) — daily 08:00 UTC health snapshot · hourly `finalizePastEvents`
 
-Conventions in force: every function has arg validators; queries return `null` on missing identity (silent retry) and throw on confirmed permission violations; mutations throw; no wall-clock reads in queries (`now` passed from client); frontend wraps `useQuery` in `$derived.by()` gated by auth state.
+Conventions in force: every function has arg validators; queries return `null` on missing identity and throw on confirmed violations; no wall-clock reads in queries (`now` passed from client); frontend wraps `useQuery` in `$derived.by()` gated by auth state.
 
 ## Routes & UI
 
-| Route          | What it does                                                                                                                                                                                                                                                                                                          |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/`            | Signed out: "Find your people." hero. Signed in: routes to onboarding if churchless, else "Welcome back, {name} · {church}" dashboard skeleton + complete-profile nudge                                                                                                                                               |
-| `/onboarding`  | Step 1: pending-invitation accept banner, church search/join, "Can't find your church?" create. Step 2: looking-for cards (all 7 options), life stage, interest chips. Pre-fills on revisit                                                                                                                           |
-| `/groups`      | Browse church groups (category + audience badges, age-group filter), Start a Group form (public = instant join, private = request/approve), leader Join Requests queue, my group-invite accept/decline banners                                                                                                        |
-| `/groups/[id]` | Group detail: roster with roles, join/request/leave, leader invite-members picker, leader "Host a gathering" form, the group's upcoming gatherings                                                                                                                                                                    |
-| `/events`      | "Gather" — upcoming gatherings with when/where/audience/host-group, going count + live spots-left, create form (capacity + waitlist toggle), RSVP: Going / Interested / Can't go                                                                                                                                      |
-| `/events/[id]` | Event detail: full info, RSVP, "Who's coming" attendee list, self check-in button, host-only printable **check-in QR** linking back to this page                                                                                                                                                                      |
-| `/admin`       | Staff-gated **Community Health**: % Connected ring, health stats, Follow Ups queue (complete/dismiss), **Team & Invitations** (invite by email + role, revoke), **People Who Need Connection** triage (All/New/Unconnected/Looking; Drifting disabled pending attendance data), verify + one-tap follow-up per member |
-| `/platform`    | Super-admin only: create churches (+ primary-admin email invitation), church list with member/admin counts, Launch/Unpublish                                                                                                                                                                                          |
+| Route                     | What it does                                                                                                                                                                                                                |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/`                       | Signed out: hero. Signed in: three **live recommendation cards** (Meet X / Join Y / Attend Z, each with its "why"), pending-verification banner, "People you met" from shared check-ins                                     |
+| `/onboarding`             | **5 steps**: join church (invite banners capture team ministry/responsibilities) → looking-for → About You → Privacy → first recommendations with one-tap Connect                                                           |
+| `/join/[slug]`            | Per-church QR/link entry (`source: 'qr'`): sign up → join → straight into onboarding                                                                                                                                        |
+| `/people`                 | Connection requests (accept/decline), recommendations with reasons, my connections, privacy-honoring searchable directory                                                                                                   |
+| `/groups`, `/groups/[id]` | Browse/create groups, request/invite flows, leader queues, group detail with roster + gatherings                                                                                                                            |
+| `/events`, `/events/[id]` | Gatherings with RSVP/waitlist, event detail with attendees, self check-in, host QR                                                                                                                                          |
+| `/community`              | Posts, prayer requests (anonymous, mark-answered), staff announcements — tabs                                                                                                                                               |
+| `/admin`                  | Community Health (incl. **Drifting**), This Week feed, **Connection Progress chart** (30d/90d/1y) + impact deltas, **Recommended Actions** (one-tap Introduce), Group Health badges, Follow Ups, Team & Invitations, triage |
+| `/admin/settings`         | Church setup wizard: priorities, connection rules, verification toggle, **white-label branding**, join QR, **CSV import**, review, launch                                                                                   |
+| `/admin/journey/[userId]` | New Attendee Journey: six-stage pipeline, next-best-action nudge, verify/follow-up, team notes                                                                                                                              |
+| `/platform`               | Super-admin: create/launch churches                                                                                                                                                                                         |
 
-Header shows Groups/Events to church members and Admin/Platform only to those entitled ([`AdminNavLink.svelte`](../src/lib/components/AdminNavLink.svelte)). Everything is real-time via Convex subscriptions.
+Header (branded per church): People/Groups/Events/Community for members, notification bell with live unread badge, Admin/Platform when entitled.
 
-**Working end-to-end walkthrough:** sign in → onboard (join/create church, set profile) → start a group → invite a member (they accept from Groups) → host a gathering → show its QR → attendee scans, lands on the event page, taps check in — every screen updates live for everyone.
+## Tests
 
-## Code health (as of 2026-09-01)
+`convex-test` (edge-runtime vitest project, `convex/*.test.ts`, seed helpers in [`test.helpers.ts`](../convex/test.helpers.ts)): **58 tests** over auth gates, invitation accept (no-downgrade, team fields), follow-up lifecycle + drifting derivation, verifyMember boundary, RSVP capacity/waitlist/finalizer/peopleYouMet, connections (dedupe, privacy directory, introductions), matching reasons, join verification, settings gating + branding validation, member journey, CSV import. Playwright smoke e2e in `e2e/`.
 
-- `pnpm check` — 0 errors · `pnpm lint` (prettier + eslint) — clean · `pnpm build` (adapter-vercel) — succeeds · `vitest` — passing (scaffold examples only)
-- All routes SSR cleanly (200s, no module errors)
-- **Not yet committed** — the whole app sits untracked on `staging` atop the initial commit
-- Only dev deployments exist (Convex dev instance, `pk_test` Clerk keys, no linked Vercel project)
+## Code health (as of 2026-09-02)
+
+- `pnpm check` — 0 errors/warnings · `pnpm lint` — clean · `pnpm build` — succeeds · `vitest` — 58 passing · e2e smoke passing
+- Only dev deployments exist (Convex dev instance, `pk_test` Clerk keys, no linked Vercel project) — see the launch checklist in the roadmap
