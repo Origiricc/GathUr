@@ -25,6 +25,16 @@ export default defineConfig({
 			{
 				extends: './vite.config.ts',
 				test: {
+					name: 'convex',
+					environment: 'edge-runtime',
+					include: ['convex/**/*.test.ts'],
+					server: { deps: { inline: ['convex-test'] } }
+				}
+			},
+
+			{
+				extends: './vite.config.ts',
+				test: {
 					name: 'client',
 					browser: {
 						enabled: true,
