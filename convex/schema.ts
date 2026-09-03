@@ -6,6 +6,7 @@ import { groupsSchema } from './schema/groups.schema';
 import { eventsSchema } from './schema/events.schema';
 import { communitySchema } from './schema/community.schema';
 import { notificationsSchema } from './schema/notifications.schema';
+import { messagingSchema } from './schema/messaging.schema';
 import { careSchema } from './schema/care.schema';
 
 export default defineSchema({
@@ -16,5 +17,6 @@ export default defineSchema({
 	...eventsSchema,
 	...communitySchema,
 	...notificationsSchema,
+	...messagingSchema,
 	...careSchema
 });

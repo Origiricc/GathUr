@@ -109,7 +109,12 @@
 					>
 						<div class="card-body flex-row items-center justify-between p-4">
 							<div>
-								<p class="font-semibold">{request.name}</p>
+								<a
+									href={resolve('/people/[userId]', { userId: request.userId })}
+									class="font-semibold hover:text-primary"
+								>
+									{request.name}
+								</a>
 								<p class="text-sm text-base-content/60">
 									{request.introducedBy
 										? `Introduced by ${request.introducedBy}`
@@ -151,7 +156,12 @@
 						out:fadeUp={{ duration: DURATION.fast, distance: 8 }}
 					>
 						<div class="card-body p-4">
-							<p class="font-semibold">{person.name}</p>
+							<a
+								href={resolve('/people/[userId]', { userId: person.userId })}
+								class="font-semibold hover:text-primary"
+							>
+								{person.name}
+							</a>
 							<ul class="mt-1 space-y-0.5 text-sm text-base-content/60">
 								{#each person.reasons as reason (reason)}
 									<li>· {reason}</li>
@@ -187,7 +197,12 @@
 								<span class="text-xs font-semibold">{connection.name[0] ?? '?'}</span>
 							</div>
 						{/if}
-						<span class="text-sm font-medium">{connection.name}</span>
+						<a
+							href={resolve('/people/[userId]', { userId: connection.userId })}
+							class="text-sm font-medium hover:text-primary"
+						>
+							{connection.name}
+						</a>
 					</div>
 				{/each}
 			</div>
@@ -219,7 +234,12 @@
 								</div>
 							{/if}
 							<div class="min-w-0">
-								<p class="truncate font-semibold">{person.name}</p>
+								<a
+									href={resolve('/people/[userId]', { userId: person.userId })}
+									class="block truncate font-semibold hover:text-primary"
+								>
+									{person.name}
+								</a>
 								{#if person.lifeStage}
 									<p class="text-xs text-base-content/60">{person.lifeStage}</p>
 								{/if}

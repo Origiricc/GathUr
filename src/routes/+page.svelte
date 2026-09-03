@@ -176,7 +176,12 @@
 									{/if}
 								</div>
 								<div class="min-w-0">
-									<p class="truncate font-semibold">{person.name}</p>
+									<a
+										href={resolve('/people/[userId]', { userId: person.userId })}
+										class="block truncate font-semibold hover:text-primary"
+									>
+										{person.name}
+									</a>
 									<p class="truncate text-sm text-base-content/60">
 										{person.sharedCount > 1
 											? `${person.sharedCount} gatherings together`

@@ -4,6 +4,7 @@ import type { QueryCtx, MutationCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
 import { getMember, requireMember } from './helpers';
 import { notify } from './notifications';
+import { addUserToGroupThreadIfExists } from './messages';
 
 async function getMyGroupRow(
 	ctx: QueryCtx | MutationCtx,
@@ -363,6 +364,12 @@ export const respondToInvite = mutation({
 			status: accept ? 'approved' : 'declined',
 			updatedAt: Date.now()
 		});
+		if (accept) {
+			const group = await ctx.db.get(row.groupId);
+			if (group) {
+				await addUserToGroupThreadIfExists(ctx, group.churchId, group._id, member.user._id);
+			}
+		}
 		return rowId;
 	}
 });
@@ -384,6 +391,9 @@ export const respond = mutation({
 		});
 		if (approve) {
 			const group = await ctx.db.get(row.groupId);
+			if (group) {
+				await addUserToGroupThreadIfExists(ctx, group.churchId, group._id, row.userId);
+			}
 			await notify(ctx, {
 				recipientId: row.userId,
 				type: 'group-request-approved',

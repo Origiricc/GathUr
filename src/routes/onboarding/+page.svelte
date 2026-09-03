@@ -219,6 +219,7 @@
 	let availability = $state<string[]>([]);
 	let preferredActivities = $state<string[]>([]);
 	let ministries = $state<string[]>([]);
+	let bio = $state('');
 
 	// ---- Step 4: privacy ----
 	const privacyOptions = [
@@ -252,6 +253,7 @@
 	// whatever was finished.
 	async function saveProfile() {
 		await client.mutation(api.profiles.upsert, {
+			bio: bio.trim() || undefined,
 			lifeStage: lifeStage || undefined,
 			interests,
 			lookingFor,
@@ -304,6 +306,7 @@
 			availability = profile.availability ?? [];
 			preferredActivities = profile.preferredActivities ?? [];
 			ministries = profile.ministries ?? [];
+			bio = profile.bio ?? '';
 			visibility = profile.privacy?.visibility ?? 'church';
 			recommendable = profile.privacy?.recommendable ?? true;
 			showContact = profile.privacy?.showContact ?? false;
@@ -596,6 +599,20 @@
 								ministries,
 								(v) => (ministries = toggle(ministries, v))
 							)}
+						</div>
+
+						<div class="mt-6">
+							<label class="label" for="bio">A little about you</label>
+							<textarea
+								id="bio"
+								class="textarea w-full"
+								rows="3"
+								maxlength="500"
+								placeholder="Whatever you'd tell someone over coffee — family, work, what you're into, how you got here."
+								bind:value={bio}></textarea>
+							<p class="mt-1 text-xs text-base-content/50">
+								Shown on your profile so people know who they're saying hi to.
+							</p>
 						</div>
 
 						<div class="mt-10 flex gap-3">
