@@ -1,0 +1,61 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/typography';
+
+@plugin 'daisyui' {
+	themes: false;
+}
+
+/* GathUr — warm, calm, trustworthy. Forest green on warm cream.
+ * See docs/product/brand.md; tokens follow the V1 product mockups. */
+@plugin 'daisyui/theme' {
+	name: 'gathur';
+	default: true;
+	prefersdark: false;
+	color-scheme: light;
+
+	/* Ground — warm cream family */
+	--color-base-100: oklch(98.5% 0.006 90); /* page background, near #FBFAF6 */
+	--color-base-200: oklch(96% 0.009 90); /* soft fills, highlight cards */
+	--color-base-300: oklch(90% 0.012 90); /* borders, dividers */
+	--color-base-content: oklch(24% 0.015 155); /* deep green-charcoal text */
+
+	/* Primary — deep forest green */
+	--color-primary: oklch(38% 0.08 155);
+	--color-primary-content: oklch(98.5% 0.006 90);
+
+	/* Secondary — soft sage (chips, icon tiles) */
+	--color-secondary: oklch(92% 0.03 150);
+	--color-secondary-content: oklch(35% 0.07 155);
+
+	/* Accent — warm gold (sparingly; ties to the fire-cross exploration) */
+	--color-accent: oklch(78% 0.1 85);
+	--color-accent-content: oklch(30% 0.05 85);
+
+	/* Neutral */
+	--color-neutral: oklch(30% 0.02 155);
+	--color-neutral-content: oklch(98.5% 0.006 90);
+
+	/* Semantic — muted, badge-friendly */
+	--color-info: oklch(62% 0.1 240);
+	--color-info-content: oklch(98.5% 0.006 90);
+	--color-success: oklch(55% 0.1 150);
+	--color-success-content: oklch(98.5% 0.006 90);
+	--color-warning: oklch(78% 0.12 80);
+	--color-warning-content: oklch(28% 0.05 80);
+	--color-error: oklch(55% 0.13 25);
+	--color-error-content: oklch(98.5% 0.006 90);
+
+	/* Shape — rounded cards, pill chips */
+	--radius-selector: 2rem;
+	--radius-field: 0.625rem;
+	--radius-box: 1rem;
+
+	--border: 1px;
+	--depth: 1;
+	--noise: 0;
+}
+
+@theme {
+	/* Serif display face for page titles and section headings */
+	--font-display: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+}

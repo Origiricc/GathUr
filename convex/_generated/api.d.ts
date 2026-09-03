@@ -1,0 +1,77 @@
+/* eslint-disable */
+/**
+ * Generated `api` utility.
+ *
+ * THIS CODE IS AUTOMATICALLY GENERATED.
+ *
+ * To regenerate, run `npx convex dev`.
+ * @module
+ */
+
+import type * as admin from "../admin.js";
+import type * as care from "../care.js";
+import type * as churches from "../churches.js";
+import type * as community from "../community.js";
+import type * as connections from "../connections.js";
+import type * as crons from "../crons.js";
+import type * as events from "../events.js";
+import type * as groups from "../groups.js";
+import type * as helpers from "../helpers.js";
+import type * as invitations from "../invitations.js";
+import type * as matching from "../matching.js";
+import type * as notifications from "../notifications.js";
+import type * as platform from "../platform.js";
+import type * as profiles from "../profiles.js";
+import type * as users from "../users.js";
+
+import type {
+  ApiFromModules,
+  FilterApi,
+  FunctionReference,
+} from "convex/server";
+
+declare const fullApi: ApiFromModules<{
+  admin: typeof admin;
+  care: typeof care;
+  churches: typeof churches;
+  community: typeof community;
+  connections: typeof connections;
+  crons: typeof crons;
+  events: typeof events;
+  groups: typeof groups;
+  helpers: typeof helpers;
+  invitations: typeof invitations;
+  matching: typeof matching;
+  notifications: typeof notifications;
+  platform: typeof platform;
+  profiles: typeof profiles;
+  users: typeof users;
+}>;
+
+/**
+ * A utility for referencing Convex functions in your app's public API.
+ *
+ * Usage:
+ * ```js
+ * const myFunctionReference = api.myModule.myFunction;
+ * ```
+ */
+export declare const api: FilterApi<
+  typeof fullApi,
+  FunctionReference<any, "public">
+>;
+
+/**
+ * A utility for referencing Convex functions in your app's internal API.
+ *
+ * Usage:
+ * ```js
+ * const myFunctionReference = internal.myModule.myFunction;
+ * ```
+ */
+export declare const internal: FilterApi<
+  typeof fullApi,
+  FunctionReference<any, "internal">
+>;
+
+export declare const components: {};
