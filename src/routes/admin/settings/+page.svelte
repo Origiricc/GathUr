@@ -44,6 +44,13 @@
 	let saving = $state(false);
 	let savedAt = $state<number | null>(null);
 
+	// White-label branding
+	let brandDisplayName = $state('');
+	let brandTagline = $state('');
+	let brandColor = $state('');
+	let brandLogoUrl = $state('');
+	let brandHideAttribution = $state(false);
+
 	let prefilled = $state(false);
 	$effect(() => {
 		const church = myChurch?.church;
@@ -53,6 +60,11 @@
 			newAttendeeDays = church.connectionRules?.newAttendeeDays ?? 30;
 			driftingDays = church.connectionRules?.driftingDays ?? 21;
 			requireVerification = church.requireVerification !== false;
+			brandDisplayName = church.branding?.displayName ?? '';
+			brandTagline = church.branding?.tagline ?? '';
+			brandColor = church.branding?.primaryColor ?? '';
+			brandLogoUrl = church.branding?.logoUrl ?? '';
+			brandHideAttribution = church.branding?.hideGathurAttribution ?? false;
 		}
 	});
 
@@ -72,6 +84,13 @@
 					driftingDays: Math.max(1, Math.min(365, driftingDays))
 				},
 				requireVerification,
+				branding: {
+					displayName: brandDisplayName.trim() || undefined,
+					tagline: brandTagline.trim() || undefined,
+					primaryColor: brandColor || undefined,
+					logoUrl: brandLogoUrl.trim() || undefined,
+					hideGathurAttribution: brandHideAttribution || undefined
+				},
 				...(status ? { status } : {})
 			});
 			savedAt = Date.now();
@@ -207,6 +226,72 @@
 						</span>
 					</span>
 					<input type="checkbox" class="toggle toggle-primary" bind:checked={requireVerification} />
+				</label>
+			</div>
+		</div>
+
+		<!-- White-label branding -->
+		<h2 class="mt-10 font-display text-xl font-bold text-primary">Make it yours</h2>
+		<p class="mt-1 text-sm text-base-content/60">
+			Present GathUr under your church's identity — name, logo, and color, everywhere your members
+			look.
+		</p>
+		<div class="card mt-4 bg-base-200">
+			<div class="card-body gap-3 p-4">
+				<div class="grid gap-3 sm:grid-cols-2">
+					<label class="block">
+						<span class="label">Display name</span>
+						<input
+							class="input w-full"
+							placeholder={myChurch?.church.name}
+							bind:value={brandDisplayName}
+						/>
+					</label>
+					<label class="block">
+						<span class="label">Tagline</span>
+						<input
+							class="input w-full"
+							placeholder="Gather Together. Grow Together."
+							bind:value={brandTagline}
+						/>
+					</label>
+					<label class="block">
+						<span class="label">Logo URL</span>
+						<input
+							class="input w-full"
+							placeholder="https://…/logo.png"
+							bind:value={brandLogoUrl}
+						/>
+					</label>
+					<label class="block">
+						<span class="label">Primary color</span>
+						<div class="flex items-center gap-2">
+							<input
+								type="color"
+								class="h-10 w-14 cursor-pointer rounded-field border border-base-300 bg-base-100"
+								value={brandColor || '#154f2f'}
+								oninput={(e) => (brandColor = e.currentTarget.value)}
+							/>
+							{#if brandColor}
+								<button class="btn btn-ghost btn-xs" onclick={() => (brandColor = '')}>
+									Use default
+								</button>
+							{/if}
+						</div>
+					</label>
+				</div>
+				<label class="flex cursor-pointer items-center justify-between gap-3">
+					<span>
+						<span class="font-medium">Hide "powered by GathUr"</span>
+						<span class="block text-sm text-base-content/60">
+							Remove the attribution from the footer.
+						</span>
+					</span>
+					<input
+						type="checkbox"
+						class="toggle toggle-primary"
+						bind:checked={brandHideAttribution}
+					/>
 				</label>
 			</div>
 		</div>

@@ -166,7 +166,16 @@ export const updateSettings = mutation({
 			v.object({ newAttendeeDays: v.number(), driftingDays: v.number() })
 		),
 		requireVerification: v.optional(v.boolean()),
-		status: v.optional(v.union(v.literal('draft'), v.literal('launched')))
+		status: v.optional(v.union(v.literal('draft'), v.literal('launched'))),
+		branding: v.optional(
+			v.object({
+				displayName: v.optional(v.string()),
+				tagline: v.optional(v.string()),
+				primaryColor: v.optional(v.string()),
+				logoUrl: v.optional(v.string()),
+				hideGathurAttribution: v.optional(v.boolean())
+			})
+		)
 	},
 	handler: async (ctx, args) => {
 		const staff = await requireChurchStaff(ctx);
@@ -179,6 +188,10 @@ export const updateSettings = mutation({
 			if (newAttendeeDays < 1 || newAttendeeDays > 365 || driftingDays < 1 || driftingDays > 365) {
 				throw new Error('Connection rules must be between 1 and 365 days');
 			}
+		}
+		// The color lands in an inline style — only accept a hex literal.
+		if (args.branding?.primaryColor && !/^#[0-9a-fA-F]{6}$/.test(args.branding.primaryColor)) {
+			throw new Error('Primary color must be a hex value like #154f2f');
 		}
 		await ctx.db.patch(staff.membership.churchId, args);
 		return staff.membership.churchId;

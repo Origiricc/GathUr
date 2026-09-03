@@ -72,6 +72,33 @@ describe('churches.updateSettings', () => {
 		).rejects.toThrow('church admin access required');
 	});
 
+	test('stores white-label branding and rejects non-hex colors', async () => {
+		const t = setup();
+		const church = await seedChurch(t, 'First Church');
+		const admin = await seedUser(t, 'admin');
+		await seedMembership(t, { userId: admin.userId, churchId: church, role: 'admin' });
+
+		await admin.as.mutation(api.churches.updateSettings, {
+			branding: {
+				displayName: 'Grace Fellowship',
+				primaryColor: '#3a2b71',
+				hideGathurAttribution: true
+			}
+		});
+		const updated = await t.run(async (ctx) => ctx.db.get(church));
+		expect(updated?.branding).toMatchObject({
+			displayName: 'Grace Fellowship',
+			primaryColor: '#3a2b71',
+			hideGathurAttribution: true
+		});
+
+		await expect(
+			admin.as.mutation(api.churches.updateSettings, {
+				branding: { primaryColor: 'red; background: url(evil)' }
+			})
+		).rejects.toThrow('hex value');
+	});
+
 	test('rejects out-of-range connection rules', async () => {
 		const t = setup();
 		const church = await seedChurch(t, 'First Church');
