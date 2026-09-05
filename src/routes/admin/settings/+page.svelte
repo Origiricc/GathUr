@@ -6,6 +6,7 @@
 	import QRCode from 'qrcode';
 	import IconQrcode from '@tabler/icons-svelte/icons/qrcode';
 	import IconCopy from '@tabler/icons-svelte/icons/copy';
+	import PageGhost from '$lib/components/PageGhost.svelte';
 
 	// Church setup wizard: what GathUr should help with, what counts as
 	// new/drifting, whether joins need verification, the Sunday QR, and a
@@ -159,9 +160,7 @@
 </svelte:head>
 
 {#if auth.isLoading || (auth.isAuthenticated && myChurchQuery.isLoading)}
-	<div class="flex justify-center py-24">
-		<span class="loading loading-lg loading-spinner text-primary"></span>
-	</div>
+	<PageGhost cards={3} />
 {:else if !isAdmin}
 	<section class="mx-auto max-w-md py-16 text-center">
 		<h1 class="font-display text-2xl font-bold text-primary">Admins only</h1>

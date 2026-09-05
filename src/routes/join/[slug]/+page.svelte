@@ -42,7 +42,13 @@
 
 <section class="mx-auto max-w-md py-12 text-center">
 	{#if churchQuery.isLoading}
-		<span class="loading loading-lg loading-spinner text-primary"></span>
+		<!-- Ghost of the welcome card: eyebrow, church name, blurb, button -->
+		<div class="flex flex-col items-center" aria-busy="true" aria-label="Loading" role="status">
+			<div class="h-4 w-24 skeleton"></div>
+			<div class="mt-3 h-10 w-64 max-w-full skeleton"></div>
+			<div class="mt-6 h-4 w-72 max-w-full skeleton"></div>
+			<div class="mt-8 h-12 w-44 skeleton rounded-full"></div>
+		</div>
 	{:else if !church}
 		<h1 class="font-display text-2xl font-bold text-primary">Church not found</h1>
 		<p class="mt-3 text-base-content/70">

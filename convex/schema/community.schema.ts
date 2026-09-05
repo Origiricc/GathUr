@@ -15,9 +15,20 @@ export const communitySchema = {
 		authorId: v.id('users'),
 		body: v.string(),
 		isAnonymous: v.boolean(),
-		isAnswered: v.boolean(),
+		// Legacy field from the old "mark answered" flow; no longer written.
+		isAnswered: v.optional(v.boolean()),
+		// Denormalized count of prayerResponses — the "12 people prayed" signal.
+		prayedCount: v.optional(v.number()),
 		createdAt: v.number()
 	}).index('by_churchId', ['churchId']),
+
+	// One row per member who tapped "Pray 🙏" on a request; keeps the
+	// prayedCount honest (one prayer per person, toggleable).
+	prayerResponses: defineTable({
+		requestId: v.id('prayerRequests'),
+		userId: v.id('users'),
+		createdAt: v.number()
+	}).index('by_requestId_and_userId', ['requestId', 'userId']),
 
 	// Member-to-member connections. `introducedBy` makes introductions a
 	// directional, attributable edge (a leader introducing two members) —

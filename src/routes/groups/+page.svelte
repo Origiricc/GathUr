@@ -7,6 +7,7 @@
 	import IconPlus from '@tabler/icons-svelte/icons/plus';
 	import IconMapPin from '@tabler/icons-svelte/icons/map-pin';
 	import IconClock from '@tabler/icons-svelte/icons/clock';
+	import PageGhost from '$lib/components/PageGhost.svelte';
 
 	const auth = useAuth();
 	const client = useConvexClient();
@@ -126,9 +127,7 @@
 </script>
 
 {#if auth.isLoading || groupsQuery.isLoading}
-	<div class="flex justify-center py-24">
-		<span class="loading loading-lg loading-spinner text-primary"></span>
-	</div>
+	<PageGhost cards={4} columns={2} />
 {:else if !auth.isAuthenticated || notMember}
 	<section class="mx-auto max-w-md py-16 text-center">
 		<p class="text-base-content/70">
@@ -291,12 +290,15 @@
 
 		<div class="mt-6 grid gap-4 sm:grid-cols-2">
 			{#each visibleGroups as group (group._id)}
-				<div class="card bg-base-200">
+				<div class="card relative bg-base-200 transition-colors hover:bg-base-300">
 					<div class="card-body p-5">
 						<div class="flex items-start justify-between gap-3">
 							<div>
 								<h2 class="card-title text-base">
-									<a href={resolve('/groups/[id]', { id: group._id })} class="hover:text-primary">
+									<a
+										href={resolve('/groups/[id]', { id: group._id })}
+										class="after:absolute after:inset-0 hover:text-primary"
+									>
 										{group.name}
 									</a>
 								</h2>
@@ -340,7 +342,7 @@
 								<span class="badge badge-warning">Requested</span>
 							{:else}
 								<button
-									class="btn btn-primary btn-sm"
+									class="btn relative btn-primary btn-sm"
 									disabled={busy === group._id}
 									onclick={() => joinGroup(group._id)}
 								>

@@ -9,6 +9,7 @@
 	import IconMapPin from '@tabler/icons-svelte/icons/map-pin';
 	import IconQrcode from '@tabler/icons-svelte/icons/qrcode';
 	import IconUsersGroup from '@tabler/icons-svelte/icons/users-group';
+	import PageGhost from '$lib/components/PageGhost.svelte';
 
 	const auth = useAuth();
 	const client = useConvexClient();
@@ -72,9 +73,7 @@
 </script>
 
 {#if auth.isLoading || detailQuery.isLoading}
-	<div class="flex justify-center py-24">
-		<span class="loading loading-lg loading-spinner text-primary"></span>
-	</div>
+	<PageGhost cards={2} />
 {:else if !event}
 	<section class="mx-auto max-w-md py-16 text-center">
 		<p class="text-base-content/70">
@@ -183,7 +182,8 @@
 								</p>
 							</div>
 						{:else}
-							<span class="loading mt-3 loading-spinner"></span>
+							<!-- Ghost of the QR square while it renders -->
+							<div class="mt-3 size-64 skeleton rounded-box" aria-busy="true" role="status"></div>
 						{/if}
 					{/if}
 				</div>

@@ -1,6 +1,12 @@
 # GathUr — Roadmap
 
-_Where we're going, in priority order. Last updated 2026-09-02. For what already exists, see [STATUS.md](./STATUS.md)._
+_Where we're going, in priority order. Last updated 2026-09-05. For what already exists, see [STATUS.md](./STATUS.md)._
+
+## Shipped 2026-09-04/05
+
+1. **Mobile polish** (from Connor's staging screenshots) — hamburger nav below `lg`, one-line centered footer tagline, cleaned member-profile header (Connected badge dropped, meta line rebuilt).
+2. **Prayer social signal** — Answered/mark-answered replaced with a Pray 🙏 → Prayed 🙏 toggle plus "N people prayed" (`prayerResponses` table + denormalized `prayedCount`).
+3. **Funnel breakout (user vs church vs platform)** — the two acquisition directions now have separate front doors: `/for-churches` (church-acquisition landing with the "attends vs belongs" positioning) → `/church/new` (leader wizard: website + size band, creator becomes verified admin, lands in `/admin/settings`), while `/onboarding` stays member-only ("Can't find your church?" routes leaders to `/church/new` instead of inline church creation). Home page offers a dual-path welcome; `churches.create` now enforces one church per account.
 
 ## Shipped 2026-09-02 (the big push)
 

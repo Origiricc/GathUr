@@ -10,6 +10,7 @@
 	import IconMessagePlus from '@tabler/icons-svelte/icons/message-plus';
 	import IconArrowLeft from '@tabler/icons-svelte/icons/arrow-left';
 	import IconUsersGroup from '@tabler/icons-svelte/icons/users-group';
+	import PageGhost from '$lib/components/PageGhost.svelte';
 
 	// Messages — DMs, group chats, and the church team channel in one inbox.
 	// Master-detail: thread list left, conversation right (stacked on mobile).
@@ -157,9 +158,7 @@
 </svelte:head>
 
 {#if auth.isLoading || (auth.isAuthenticated && myChurchQuery.isLoading)}
-	<div class="flex justify-center py-24">
-		<span class="loading loading-lg loading-spinner text-primary"></span>
-	</div>
+	<PageGhost cards={4} avatars />
 {:else if !isVerified}
 	<section class="mx-auto max-w-md py-16 text-center">
 		<p class="text-base-content/70">
@@ -280,8 +279,13 @@
 					Pick a conversation.
 				</div>
 			{:else if !conversation}
-				<div class="flex flex-1 items-center justify-center">
-					<span class="loading loading-spinner text-primary"></span>
+				<!-- Ghost of a conversation: alternating chat bubbles -->
+				<div class="flex-1 space-y-4 p-4" aria-busy="true" aria-label="Loading" role="status">
+					{#each [true, false, true, false] as mine, i (i)}
+						<div class="flex {mine ? 'justify-end' : 'justify-start'}">
+							<div class="h-10 skeleton {i % 2 ? 'w-40' : 'w-56'} max-w-[70%] rounded-2xl"></div>
+						</div>
+					{/each}
 				</div>
 			{:else}
 				<div class="flex items-center gap-2 border-b border-base-300 px-4 py-3">

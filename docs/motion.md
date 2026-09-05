@@ -33,4 +33,4 @@ grep -rnE "(in:|out:|transition:|animate:)[a-zA-Z]+=\{\{[^}]*duration:\s*[0-9]+|
 - `{#key}` runs `in:`/`out:` simultaneously → both children need `[grid-area:1/1]` on a `grid` parent (see onboarding).
 - **`in:` transitions do not play on hydration** — first-paint entrances use `use:reveal`, never `in:fadeUp`.
 - In-app lists use `once: true` on reveals so they never re-animate on scroll; replaying reveals are for landing surfaces only.
-- Loading state is the DaisyUI spinner — no skeletons, no `animate-pulse`.
+- Loading state is a `PageGhost` skeleton shell mirroring the page's shape (see [page-ghosts.md](./page-ghosts.md)) — no bare page-level spinners, no hand-rolled `animate-pulse`.

@@ -3,7 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { api } from '$convex/api';
 	import TrendChart from '$lib/components/TrendChart.svelte';
-	import { DURATION, fadeUp, occFlip } from '$lib/motion';
+	import { DURATION, fadeUp, occFlip, prefersReducedMotion } from '$lib/motion';
 	import type { Id } from '$convex/dataModel';
 	import IconUsers from '@tabler/icons-svelte/icons/users';
 	import IconUserPlus from '@tabler/icons-svelte/icons/user-plus';
@@ -12,6 +12,7 @@
 	import IconWaveSine from '@tabler/icons-svelte/icons/wave-sine';
 	import IconLock from '@tabler/icons-svelte/icons/lock';
 	import IconPencil from '@tabler/icons-svelte/icons/pencil';
+	import PageGhost from '$lib/components/PageGhost.svelte';
 
 	const auth = useAuth();
 	const client = useConvexClient();
@@ -141,7 +142,7 @@
 	});
 
 	// Triage segments — Drifting derives from check-in history + church rules.
-	type Segment = 'all' | 'new' | 'unconnected' | 'drifting' | 'looking';
+	type Segment = 'all' | 'new' | 'unconnected' | 'drifting' | 'looking' | 'pending';
 	let segment = $state<Segment>('all');
 
 	const segments: { key: Segment; label: string }[] = [
@@ -149,7 +150,8 @@
 		{ key: 'new', label: 'New' },
 		{ key: 'unconnected', label: 'Unconnected' },
 		{ key: 'drifting', label: 'Drifting' },
-		{ key: 'looking', label: 'Looking' }
+		{ key: 'looking', label: 'Looking' },
+		{ key: 'pending', label: 'Pending' }
 	];
 
 	const visibleMembers = $derived.by(() => {
@@ -162,10 +164,24 @@
 				return members.filter((m) => m.isDrifting);
 			case 'looking':
 				return members.filter((m) => m.looking);
+			case 'pending':
+				return members.filter((m) => m.status !== 'verified');
 			default:
 				return members;
 		}
 	});
+
+	// Stat cards press through to the matching triage segment (or section).
+	function scrollTo(id: string) {
+		document
+			.getElementById(id)
+			?.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+	}
+
+	function jumpToSegment(s: Segment) {
+		segment = s;
+		scrollTo('people-triage');
+	}
 
 	let busy = $state<string | null>(null);
 
@@ -331,9 +347,7 @@
 </script>
 
 {#if auth.isLoading || (auth.isAuthenticated && myChurchQuery.isLoading)}
-	<div class="flex justify-center py-24">
-		<span class="loading loading-lg loading-spinner text-primary"></span>
-	</div>
+	<PageGhost wide cards={6} columns={3} />
 {:else if !auth.isAuthenticated || !myChurch}
 	<section class="mx-auto max-w-md py-16 text-center">
 		<p class="text-base-content/70">Sign in and join a church to access this page.</p>
@@ -391,52 +405,71 @@
 						<p class="text-sm text-base-content/60">Connected members</p>
 					</div>
 				</div>
-				<div class="card bg-base-200">
+				<button
+					class="card bg-base-200 text-left transition-colors hover:bg-base-300"
+					onclick={() => jumpToSegment('new')}
+				>
 					<div class="card-body p-4">
 						<IconUserPlus class="text-info" size={22} />
 						<p class="text-2xl font-bold">{counts?.newSince ?? '–'}</p>
 						<p class="text-sm text-base-content/60">New attendees (30d)</p>
 					</div>
-				</div>
-				<div class="card bg-base-200">
+				</button>
+				<button
+					class="card bg-base-200 text-left transition-colors hover:bg-base-300"
+					onclick={() => jumpToSegment('unconnected')}
+				>
 					<div class="card-body p-4">
 						<IconUserQuestion class="text-warning" size={22} />
 						<p class="text-2xl font-bold">{counts?.unconnected ?? '–'}</p>
 						<p class="text-sm text-base-content/60">Unconnected</p>
 					</div>
-				</div>
-				<div class="card bg-base-200">
+				</button>
+				<button
+					class="card bg-base-200 text-left transition-colors hover:bg-base-300"
+					onclick={() => jumpToSegment('looking')}
+				>
 					<div class="card-body p-4">
 						<IconHeartSearch class="text-secondary-content" size={22} />
 						<p class="text-2xl font-bold">{counts?.looking ?? '–'}</p>
 						<p class="text-sm text-base-content/60">Looking for community</p>
 					</div>
-				</div>
-				<div class="card bg-base-200">
+				</button>
+				<button
+					class="card bg-base-200 text-left transition-colors hover:bg-base-300"
+					onclick={() => jumpToSegment('drifting')}
+				>
 					<div class="card-body p-4">
 						<IconWaveSine class="text-error" size={22} />
 						<p class="text-2xl font-bold">{counts?.drifting ?? '–'}</p>
 						<p class="text-sm text-base-content/60">Drifting</p>
 					</div>
-				</div>
-				<div class="card bg-base-200">
+				</button>
+				<button
+					class="card bg-base-200 text-left transition-colors hover:bg-base-300"
+					onclick={() => jumpToSegment('pending')}
+				>
 					<div class="card-body p-4">
 						<p class="text-2xl font-bold">{counts?.pending ?? '–'}</p>
 						<p class="text-sm text-base-content/60">Pending verification</p>
 					</div>
-				</div>
+				</button>
 				<div class="card bg-base-200">
 					<div class="card-body p-4">
 						<p class="text-2xl font-bold">{counts?.withProfile ?? '–'}</p>
 						<p class="text-sm text-base-content/60">Profiles completed</p>
 					</div>
 				</div>
-				<div class="card bg-base-200">
+				<button
+					class="card bg-base-200 text-left transition-colors hover:bg-base-300"
+					onclick={() => scrollTo('follow-ups')}
+					disabled={followUps.length === 0}
+				>
 					<div class="card-body p-4">
 						<p class="text-2xl font-bold">{followUps.length}</p>
 						<p class="text-sm text-base-content/60">Open follow-ups</p>
 					</div>
-				</div>
+				</button>
 			</div>
 		</div>
 
@@ -528,18 +561,25 @@
 
 		<!-- Follow-ups queue -->
 		{#if followUps.length > 0}
-			<h2 class="mt-12 font-display text-xl font-bold text-primary">Follow Ups</h2>
+			<h2 id="follow-ups" class="mt-12 scroll-mt-24 font-display text-xl font-bold text-primary">
+				Follow Ups
+			</h2>
 			<div class="mt-4 space-y-3">
 				{#each followUps as followUp (followUp._id)}
 					<div
-						class="card bg-base-200"
+						class="card relative bg-base-200 transition-colors hover:bg-base-300"
 						animate:occFlip
 						out:fadeUp={{ duration: DURATION.fast, distance: 8 }}
 					>
 						<div class="card-body flex-row items-center justify-between p-4">
 							<div>
 								<p class="font-semibold">
-									{followUp.subjectName}
+									<a
+										href={resolve('/admin/journey/[userId]', { userId: followUp.subjectId })}
+										class="after:absolute after:inset-0 hover:text-primary"
+									>
+										{followUp.subjectName}
+									</a>
 									<span class="ml-2 badge badge-ghost badge-sm">
 										{reasonLabels[followUp.reason]}
 									</span>
@@ -551,7 +591,7 @@
 									{/if}
 								</p>
 							</div>
-							<div class="flex gap-2">
+							<div class="relative flex gap-2">
 								<button
 									class="btn btn-primary btn-sm"
 									disabled={busy === followUp._id}
@@ -588,7 +628,22 @@
 					>
 						<div class="card-body flex-row items-center justify-between gap-4 p-4">
 							<div>
-								<p class="font-semibold">Introduce {action.aName} to {action.bName}</p>
+								<p class="font-semibold">
+									Introduce
+									<a
+										href={resolve('/admin/journey/[userId]', { userId: action.requesterId })}
+										class="hover:text-primary hover:underline"
+									>
+										{action.aName}
+									</a>
+									to
+									<a
+										href={resolve('/admin/journey/[userId]', { userId: action.recipientId })}
+										class="hover:text-primary hover:underline"
+									>
+										{action.bName}
+									</a>
+								</p>
 								<p class="text-sm text-base-content/60">{action.reasons.join(' · ')}</p>
 							</div>
 							{#if introduced.has(`${action.requesterId}-${action.recipientId}`)}
@@ -631,7 +686,14 @@
 						{#each groupHealth as group (group.groupId)}
 							<tr>
 								<td>
-									<p class="font-semibold">{group.name}</p>
+									<p class="font-semibold">
+										<a
+											href={resolve('/groups/[id]', { id: group.groupId })}
+											class="hover:text-primary"
+										>
+											{group.name}
+										</a>
+									</p>
 									<p class="text-sm text-base-content/60">{group.reason}</p>
 								</td>
 								<td>
@@ -715,7 +777,9 @@
 		{/if}
 
 		<!-- People triage -->
-		<h2 class="mt-12 font-display text-xl font-bold text-primary">People Who Need Connection</h2>
+		<h2 id="people-triage" class="mt-12 scroll-mt-24 font-display text-xl font-bold text-primary">
+			People Who Need Connection
+		</h2>
 		<p class="mt-1 text-sm text-base-content/60">Focus on who needs attention next.</p>
 
 		<div role="tablist" class="tabs tabs-box mt-4 w-fit">

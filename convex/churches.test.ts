@@ -40,6 +40,44 @@ describe('churches.join verification', () => {
 	});
 });
 
+describe('churches.create', () => {
+	test('a leader creates a church and becomes its verified admin', async () => {
+		const t = setup();
+		const leader = await seedUser(t, 'leader');
+		const churchId = await leader.as.mutation(api.churches.create, {
+			name: 'New Hope Church',
+			city: 'Gilbert',
+			state: 'AZ',
+			website: 'https://newhope.org',
+			sizeBand: '100-500'
+		});
+		const church = await t.run(async (ctx) => ctx.db.get(churchId));
+		expect(church).toMatchObject({
+			name: 'New Hope Church',
+			website: 'https://newhope.org',
+			sizeBand: '100-500'
+		});
+
+		const mine = await leader.as.query(api.churches.myChurch, {});
+		expect(mine?.membership).toMatchObject({
+			role: 'admin',
+			status: 'verified',
+			source: 'created-church'
+		});
+	});
+
+	test('someone who already belongs to a church cannot create another', async () => {
+		const t = setup();
+		const church = await seedChurch(t, 'First Church');
+		const member = await seedUser(t, 'member');
+		await seedMembership(t, { userId: member.userId, churchId: church });
+
+		await expect(
+			member.as.mutation(api.churches.create, { name: 'Second Church' })
+		).rejects.toThrow('You already belong to a church');
+	});
+});
+
 describe('churches.updateSettings', () => {
 	test('admins set priorities, rules, and verification policy', async () => {
 		const t = setup();

@@ -9,6 +9,7 @@
 	import IconClock from '@tabler/icons-svelte/icons/clock';
 	import IconUserPlus from '@tabler/icons-svelte/icons/user-plus';
 	import IconCalendarEvent from '@tabler/icons-svelte/icons/calendar-event';
+	import PageGhost from '$lib/components/PageGhost.svelte';
 
 	const auth = useAuth();
 	const client = useConvexClient();
@@ -111,9 +112,7 @@
 </script>
 
 {#if auth.isLoading || detailQuery.isLoading}
-	<div class="flex justify-center py-24">
-		<span class="loading loading-lg loading-spinner text-primary"></span>
-	</div>
+	<PageGhost cards={3} />
 {:else if !group}
 	<section class="mx-auto max-w-md py-16 text-center">
 		<p class="text-base-content/70">
@@ -249,20 +248,25 @@
 		</h2>
 		<ul class="mt-3 grid gap-2 sm:grid-cols-2">
 			{#each group.members as member (member.userId)}
-				<li class="flex items-center gap-3 rounded-box bg-base-200 px-4 py-2">
-					{#if member.imageUrl}
-						<img src={member.imageUrl} alt="" class="size-8 rounded-full" />
-					{:else}
-						<div
-							class="flex size-8 items-center justify-center rounded-full bg-secondary text-sm font-semibold text-secondary-content"
-						>
-							{member.name[0] ?? '?'}
-						</div>
-					{/if}
-					<span class="text-sm font-medium">{member.name}</span>
-					{#if member.role !== 'member'}
-						<span class="ml-auto badge badge-ghost badge-sm">{member.role}</span>
-					{/if}
+				<li>
+					<a
+						href={resolve('/people/[userId]', { userId: member.userId })}
+						class="flex items-center gap-3 rounded-box bg-base-200 px-4 py-2 transition-colors hover:bg-base-300"
+					>
+						{#if member.imageUrl}
+							<img src={member.imageUrl} alt="" class="size-8 rounded-full" />
+						{:else}
+							<div
+								class="flex size-8 items-center justify-center rounded-full bg-secondary text-sm font-semibold text-secondary-content"
+							>
+								{member.name[0] ?? '?'}
+							</div>
+						{/if}
+						<span class="text-sm font-medium">{member.name}</span>
+						{#if member.role !== 'member'}
+							<span class="ml-auto badge badge-ghost badge-sm">{member.role}</span>
+						{/if}
+					</a>
 				</li>
 			{/each}
 		</ul>

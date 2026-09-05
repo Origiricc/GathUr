@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { useAuth, useQuery, useConvexClient } from 'convex-svelte';
+	import { resolve } from '$app/paths';
 	import { api } from '$convex/api';
 	import type { Id } from '$convex/dataModel';
 	import { DURATION, fadeUp } from '$lib/motion';
 	import IconBuildingChurch from '@tabler/icons-svelte/icons/building-church';
 	import IconPencil from '@tabler/icons-svelte/icons/pencil';
+	import PageGhost from '$lib/components/PageGhost.svelte';
 
 	const auth = useAuth();
 	const client = useConvexClient();
@@ -137,9 +139,7 @@
 </script>
 
 {#if auth.isLoading || (auth.isAuthenticated && amIQuery.isLoading)}
-	<div class="flex justify-center py-24">
-		<span class="loading loading-lg loading-spinner text-primary"></span>
-	</div>
+	<PageGhost cards={3} />
 {:else if !isPlatformAdmin}
 	<section class="mx-auto max-w-md py-16 text-center">
 		<h1 class="font-display text-2xl font-bold text-primary">Platform admins only</h1>
@@ -270,7 +270,15 @@
 						{:else}
 							<tr class={church.isActive ? '' : 'opacity-60'}>
 								<td>
-									<p class="font-semibold">{church.name}</p>
+									<p class="font-semibold">
+										<a
+											href={resolve('/join/[slug]', { slug: church.slug })}
+											class="hover:text-primary"
+											title="Open the church's join page"
+										>
+											{church.name}
+										</a>
+									</p>
 									<p class="text-sm text-base-content/60">/{church.slug}</p>
 								</td>
 								<td class="text-sm text-base-content/70">
