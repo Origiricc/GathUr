@@ -78,10 +78,17 @@ export const prayerRequests = query({
 			.take(50);
 		const enriched = [];
 		for (const request of rows) {
+			const myResponse = await ctx.db
+				.query('prayerResponses')
+				.withIndex('by_requestId_and_userId', (q) =>
+					q.eq('requestId', request._id).eq('userId', member.user._id)
+				)
+				.unique();
 			enriched.push({
 				_id: request._id,
 				body: request.body,
-				isAnswered: request.isAnswered,
+				prayedCount: request.prayedCount ?? 0,
+				iPrayed: myResponse !== null,
 				createdAt: request.createdAt,
 				authorName: request.isAnonymous ? null : await authorName(ctx, request.authorId),
 				isMine: request.authorId === member.user._id
@@ -103,21 +110,38 @@ export const createPrayerRequest = mutation({
 			authorId: member.user._id,
 			body: trimmed,
 			isAnonymous: args.isAnonymous,
-			isAnswered: false,
+			prayedCount: 0,
 			createdAt: Date.now()
 		});
 	}
 });
 
-/** The author marks their own request answered — a small testimony. */
-export const markPrayerAnswered = mutation({
+/** Toggle "I prayed for this" — returns whether the member has now prayed. */
+export const togglePrayed = mutation({
 	args: { requestId: v.id('prayerRequests') },
 	handler: async (ctx, { requestId }) => {
 		const member = await requireMember(ctx);
 		const request = await ctx.db.get(requestId);
-		if (!request || request.authorId !== member.user._id) throw new Error('Request not found');
-		if (!request.isAnswered) await ctx.db.patch(requestId, { isAnswered: true });
-		return requestId;
+		if (!request || request.churchId !== member.membership.churchId)
+			throw new Error('Request not found');
+		const existing = await ctx.db
+			.query('prayerResponses')
+			.withIndex('by_requestId_and_userId', (q) =>
+				q.eq('requestId', requestId).eq('userId', member.user._id)
+			)
+			.unique();
+		if (existing) {
+			await ctx.db.delete(existing._id);
+			await ctx.db.patch(requestId, { prayedCount: Math.max(0, (request.prayedCount ?? 0) - 1) });
+			return false;
+		}
+		await ctx.db.insert('prayerResponses', {
+			requestId,
+			userId: member.user._id,
+			createdAt: Date.now()
+		});
+		await ctx.db.patch(requestId, { prayedCount: (request.prayedCount ?? 0) + 1 });
+		return true;
 	}
 });
 

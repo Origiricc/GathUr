@@ -52,17 +52,27 @@ export const myChurch = query({
 	}
 });
 
-/** "Can't find your church?" — create it and become its admin. */
+/** The church-leader funnel (/church/new): create a church and become its admin. */
 export const create = mutation({
 	args: {
 		name: v.string(),
 		city: v.optional(v.string()),
-		state: v.optional(v.string())
+		state: v.optional(v.string()),
+		website: v.optional(v.string()),
+		sizeBand: v.optional(v.string())
 	},
 	handler: async (ctx, args) => {
 		const user = await requireUser(ctx);
 		const name = args.name.trim();
 		if (!name) throw new Error('Church name is required');
+
+		// One community per person for now — a member of one church can't
+		// also found another under the same account.
+		const existing = await ctx.db
+			.query('memberships')
+			.withIndex('by_userId', (q) => q.eq('userId', user._id))
+			.first();
+		if (existing) throw new Error('You already belong to a church');
 
 		const slug = await uniqueChurchSlug(ctx, name);
 		const now = Date.now();
@@ -71,6 +81,8 @@ export const create = mutation({
 			slug,
 			city: args.city?.trim() || undefined,
 			state: args.state?.trim() || undefined,
+			website: args.website?.trim() || undefined,
+			sizeBand: args.sizeBand || undefined,
 			isActive: true,
 			createdAt: now
 		});

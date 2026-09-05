@@ -7,6 +7,7 @@
 	import IconMessageCircle from '@tabler/icons-svelte/icons/message-circle';
 	import IconHandStop from '@tabler/icons-svelte/icons/hand-stop';
 	import IconSpeakerphone from '@tabler/icons-svelte/icons/speakerphone';
+	import PageGhost from '$lib/components/PageGhost.svelte';
 
 	const auth = useAuth();
 	const client = useConvexClient();
@@ -92,10 +93,10 @@
 		}
 	}
 
-	async function markAnswered(requestId: Id<'prayerRequests'>) {
+	async function togglePrayed(requestId: Id<'prayerRequests'>) {
 		busy = requestId;
 		try {
-			await client.mutation(api.community.markPrayerAnswered, { requestId });
+			await client.mutation(api.community.togglePrayed, { requestId });
 		} finally {
 			busy = null;
 		}
@@ -116,9 +117,7 @@
 </svelte:head>
 
 {#if auth.isLoading || (auth.isAuthenticated && myChurchQuery.isLoading)}
-	<div class="flex justify-center py-24">
-		<span class="loading loading-lg loading-spinner text-primary"></span>
-	</div>
+	<PageGhost tabs={3} cards={3} />
 {:else if !isVerified}
 	<section class="mx-auto max-w-md py-16 text-center">
 		<p class="text-base-content/70">
@@ -258,25 +257,26 @@
 								<div class="card-body p-4">
 									<div class="flex items-start justify-between gap-2">
 										<div>
-											<p class="text-sm font-semibold">
-												{prayer.authorName ?? 'Anonymous'}
-												{#if prayer.isAnswered}
-													<span class="ml-1 badge badge-sm badge-success">Answered</span>
-												{/if}
-											</p>
+											<p class="text-sm font-semibold">{prayer.authorName ?? 'Anonymous'}</p>
 											<p class="text-xs text-base-content/50">{formatDate(prayer.createdAt)}</p>
 										</div>
-										{#if prayer.isMine && !prayer.isAnswered}
+										{#if !prayer.isMine}
 											<button
-												class="btn btn-ghost btn-xs"
+												class="btn btn-xs {prayer.iPrayed ? 'btn-secondary' : 'btn-outline'}"
 												disabled={busy === prayer._id}
-												onclick={() => markAnswered(prayer._id)}
+												onclick={() => togglePrayed(prayer._id)}
 											>
-												Mark answered
+												{prayer.iPrayed ? 'Prayed 🙏' : 'Pray 🙏'}
 											</button>
 										{/if}
 									</div>
 									<p class="mt-2 whitespace-pre-wrap">{prayer.body}</p>
+									{#if prayer.prayedCount > 0}
+										<p class="mt-1 text-xs text-base-content/50">
+											🙏 {prayer.prayedCount}
+											{prayer.prayedCount === 1 ? 'person' : 'people'} prayed
+										</p>
+									{/if}
 								</div>
 							</div>
 						{:else}

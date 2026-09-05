@@ -15,6 +15,7 @@
 	} from '$lib/profileOptions';
 	import IconCheck from '@tabler/icons-svelte/icons/check';
 	import IconUserCircle from '@tabler/icons-svelte/icons/user-circle';
+	import PageGhost from '$lib/components/PageGhost.svelte';
 
 	const auth = useAuth();
 	const client = useConvexClient();
@@ -125,9 +126,7 @@
 {/snippet}
 
 {#if auth.isLoading || (auth.isAuthenticated && meQuery.isLoading)}
-	<div class="flex justify-center py-24">
-		<span class="loading loading-lg loading-spinner text-primary"></span>
-	</div>
+	<PageGhost profile cards={3} />
 {:else if !auth.isAuthenticated || !me}
 	<section class="mx-auto max-w-md py-16 text-center">
 		<p class="text-base-content/70">Sign in to edit your profile.</p>

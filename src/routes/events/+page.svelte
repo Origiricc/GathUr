@@ -6,6 +6,7 @@
 	import IconCalendarEvent from '@tabler/icons-svelte/icons/calendar-event';
 	import IconPlus from '@tabler/icons-svelte/icons/plus';
 	import IconMapPin from '@tabler/icons-svelte/icons/map-pin';
+	import PageGhost from '$lib/components/PageGhost.svelte';
 
 	const auth = useAuth();
 	const client = useConvexClient();
@@ -93,9 +94,7 @@
 </script>
 
 {#if auth.isLoading || eventsQuery.isLoading}
-	<div class="flex justify-center py-24">
-		<span class="loading loading-lg loading-spinner text-primary"></span>
-	</div>
+	<PageGhost cards={3} />
 {:else if !auth.isAuthenticated || notMember}
 	<section class="mx-auto max-w-md py-16 text-center">
 		<p class="text-base-content/70">
@@ -177,12 +176,15 @@
 		<h2 class="mt-10 font-display text-xl font-bold text-primary">Upcoming Gatherings</h2>
 		<div class="mt-4 space-y-4">
 			{#each events as event (event._id)}
-				<div class="card bg-base-200">
+				<div class="card relative bg-base-200 transition-colors hover:bg-base-300">
 					<div class="card-body p-5">
 						<div class="flex items-start justify-between gap-3">
 							<div>
 								<h3 class="card-title text-base">
-									<a href={resolve('/events/[id]', { id: event._id })} class="hover:text-primary">
+									<a
+										href={resolve('/events/[id]', { id: event._id })}
+										class="after:absolute after:inset-0 hover:text-primary"
+									>
 										{event.title}
 									</a>
 								</h3>
@@ -225,7 +227,7 @@
 						{#if event.description}
 							<p class="text-sm text-base-content/70">{event.description}</p>
 						{/if}
-						<div class="mt-1 card-actions items-center justify-end gap-2">
+						<div class="relative mt-1 card-actions items-center justify-end gap-2">
 							{#if event.myStatus === 'waitlisted'}
 								<span class="badge badge-warning">Waitlisted</span>
 							{:else if event.myStatus === 'checked_in' || event.myStatus === 'attended'}

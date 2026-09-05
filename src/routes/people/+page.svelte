@@ -6,6 +6,7 @@
 	import { DURATION, fadeUp, occFlip } from '$lib/motion';
 	import IconHeartHandshake from '@tabler/icons-svelte/icons/heart-handshake';
 	import IconSparkles from '@tabler/icons-svelte/icons/sparkles';
+	import PageGhost from '$lib/components/PageGhost.svelte';
 
 	const auth = useAuth();
 	const client = useConvexClient();
@@ -80,9 +81,7 @@
 </svelte:head>
 
 {#if auth.isLoading || (auth.isAuthenticated && myChurchQuery.isLoading)}
-	<div class="flex justify-center py-24">
-		<span class="loading loading-lg loading-spinner text-primary"></span>
-	</div>
+	<PageGhost cards={4} avatars />
 {:else if !isVerified}
 	<section class="mx-auto max-w-md py-16 text-center">
 		<p class="text-base-content/70">
@@ -103,7 +102,7 @@
 			<div class="mt-4 space-y-3">
 				{#each pending as request (request.connectionId)}
 					<div
-						class="card bg-base-200"
+						class="card relative bg-base-200 transition-colors hover:bg-base-300"
 						animate:occFlip
 						out:fadeUp={{ duration: DURATION.fast, distance: 8 }}
 					>
@@ -111,7 +110,7 @@
 							<div>
 								<a
 									href={resolve('/people/[userId]', { userId: request.userId })}
-									class="font-semibold hover:text-primary"
+									class="font-semibold after:absolute after:inset-0 hover:text-primary"
 								>
 									{request.name}
 								</a>
@@ -121,7 +120,7 @@
 										: 'Wants to connect with you'}
 								</p>
 							</div>
-							<div class="flex gap-2">
+							<div class="relative flex gap-2">
 								<button
 									class="btn btn-primary btn-sm"
 									disabled={busy === request.connectionId}
@@ -151,14 +150,14 @@
 			<div class="mt-4 grid gap-3 md:grid-cols-3">
 				{#each recommendations as person (person.userId)}
 					<div
-						class="card bg-base-200"
+						class="card relative bg-base-200 transition-colors hover:bg-base-300"
 						animate:occFlip
 						out:fadeUp={{ duration: DURATION.fast, distance: 8 }}
 					>
 						<div class="card-body p-4">
 							<a
 								href={resolve('/people/[userId]', { userId: person.userId })}
-								class="font-semibold hover:text-primary"
+								class="font-semibold after:absolute after:inset-0 hover:text-primary"
 							>
 								{person.name}
 							</a>
@@ -168,7 +167,7 @@
 								{/each}
 							</ul>
 							<button
-								class="btn mt-3 btn-primary btn-sm"
+								class="btn relative mt-3 btn-primary btn-sm"
 								disabled={busy === person.userId}
 								onclick={() => connect(person.userId)}
 							>
@@ -187,7 +186,9 @@
 			</h2>
 			<div class="mt-4 flex flex-wrap gap-3">
 				{#each connections as connection (connection.connectionId)}
-					<div class="flex items-center gap-2 rounded-box bg-base-200 px-4 py-2">
+					<div
+						class="relative flex items-center gap-2 rounded-box bg-base-200 px-4 py-2 transition-colors hover:bg-base-300"
+					>
 						{#if connection.imageUrl}
 							<img src={connection.imageUrl} alt="" class="size-7 rounded-full" />
 						{:else}
@@ -199,7 +200,7 @@
 						{/if}
 						<a
 							href={resolve('/people/[userId]', { userId: connection.userId })}
-							class="text-sm font-medium hover:text-primary"
+							class="text-sm font-medium after:absolute after:inset-0 hover:text-primary"
 						>
 							{connection.name}
 						</a>
@@ -221,7 +222,7 @@
 		/>
 		<div class="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
 			{#each visibleDirectory as person (person.userId)}
-				<div class="card bg-base-200">
+				<div class="card relative bg-base-200 transition-colors hover:bg-base-300">
 					<div class="card-body p-4">
 						<div class="flex items-center gap-3">
 							{#if person.imageUrl}
@@ -236,7 +237,7 @@
 							<div class="min-w-0">
 								<a
 									href={resolve('/people/[userId]', { userId: person.userId })}
-									class="block truncate font-semibold hover:text-primary"
+									class="block truncate font-semibold after:absolute after:inset-0 hover:text-primary"
 								>
 									{person.name}
 								</a>
@@ -262,7 +263,7 @@
 								<span class="badge badge-ghost badge-sm">Request pending</span>
 							{:else}
 								<button
-									class="btn btn-outline btn-sm"
+									class="btn relative btn-outline btn-sm"
 									disabled={busy === person.userId}
 									onclick={() => connect(person.userId)}
 								>

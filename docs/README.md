@@ -22,6 +22,8 @@ _Product and technical docs for GathUr — a community platform for churches._
 ## Technical
 
 - [OCC Ecosystem Reuse](./occ-ecosystem-reuse.md) — Decision record: inherit OCC schema patterns (Icii RSVP machine, circles membership, Notifii inbox), not packages or backend
+- [Motion](./motion.md) — The OCC motion language as ported here: `DURATION`/`SPRING` rhythm, `occFlip`/`fadeUp`/`reveal`, gotchas
+- [Page Ghosts](./page-ghosts.md) — Skeleton loading via one prop-composed `PageGhost` component: API, per-route map, how to wire a new page
 
 The tech stack and patterns follow the **OCC single-project conventions** — see the OCC monorepo (`~/Desktop/OCC/OCC`):
 

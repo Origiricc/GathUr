@@ -6,6 +6,7 @@
 	import type { Id } from '$convex/dataModel';
 	import IconCheck from '@tabler/icons-svelte/icons/check';
 	import IconSparkles from '@tabler/icons-svelte/icons/sparkles';
+	import PageGhost from '$lib/components/PageGhost.svelte';
 
 	// The New Attendee Journey: one person's road from first visit to
 	// belonging, with the next best action on top.
@@ -85,9 +86,7 @@
 </svelte:head>
 
 {#if auth.isLoading || (auth.isAuthenticated && myChurchQuery.isLoading)}
-	<div class="flex justify-center py-24">
-		<span class="loading loading-lg loading-spinner text-primary"></span>
-	</div>
+	<PageGhost profile cards={3} />
 {:else if !isStaff}
 	<section class="mx-auto max-w-md py-16 text-center">
 		<h1 class="font-display text-2xl font-bold text-primary">Staff only</h1>
@@ -113,7 +112,11 @@
 				</div>
 			{/if}
 			<div>
-				<h1 class="font-display text-3xl font-bold text-primary">{journey.name}</h1>
+				<h1 class="font-display text-3xl font-bold text-primary">
+					<a href={resolve('/people/[userId]', { userId })} class="hover:underline">
+						{journey.name}
+					</a>
+				</h1>
 				<p class="text-sm text-base-content/60">
 					{journey.email} · {journey.role}
 					{#if journey.source}

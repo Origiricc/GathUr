@@ -8,6 +8,7 @@
 	import IconUsersGroup from '@tabler/icons-svelte/icons/users-group';
 	import IconCalendarEvent from '@tabler/icons-svelte/icons/calendar-event';
 	import IconHeartHandshake from '@tabler/icons-svelte/icons/heart-handshake';
+	import PageGhost from '$lib/components/PageGhost.svelte';
 
 	const auth = useAuth();
 
@@ -64,6 +65,10 @@
 			use:reveal={{ once: true, delay: 160, duration: DURATION.cinematic, distance: 24 }}
 		>
 			<SignUpButton mode="modal" class="btn btn-lg btn-primary">Get started</SignUpButton>
+			<p class="mt-4 text-sm text-base-content/60">
+				Bringing GathUr to your church?
+				<a href={resolve('/for-churches')} class="link text-primary">Start here →</a>
+			</p>
 		</div>
 		<div class="mt-16 grid grid-cols-2 gap-4 text-left sm:grid-cols-4">
 			{#each [{ icon: IconUsers, label: 'Meet people' }, { icon: IconUsersGroup, label: 'Find a group' }, { icon: IconCalendarEvent, label: 'Attend gatherings' }, { icon: IconHeartHandshake, label: 'Get involved' }] as item, i (item.label)}
@@ -84,16 +89,37 @@
 
 <Show when="signed-in">
 	{#if loading}
-		<div class="flex justify-center py-24">
-			<span class="loading loading-lg loading-spinner text-primary"></span>
-		</div>
+		<PageGhost wide cards={3} columns={3} />
 	{:else if !myChurch}
 		<section class="mx-auto max-w-xl py-16 text-center">
 			<h1 class="font-display text-4xl font-bold text-primary">Welcome to GathUr</h1>
-			<p class="mt-4 text-base-content/70">
-				Let's get you connected. Start by joining your church.
-			</p>
-			<a href={resolve('/onboarding')} class="btn mt-8 btn-lg btn-primary">Join your church</a>
+			<p class="mt-4 text-base-content/70">Let's get you connected. How are you arriving?</p>
+			<div class="mt-8 grid gap-4 sm:grid-cols-2">
+				<a
+					href={resolve('/onboarding')}
+					class="card bg-base-200 transition-colors hover:bg-base-300"
+				>
+					<div class="card-body items-center text-center">
+						<h2 class="card-title text-base">I'm joining my church</h2>
+						<p class="text-sm text-base-content/60">
+							Find your church, build your profile, and get your first connections.
+						</p>
+						<span class="btn mt-2 btn-primary btn-sm">Join your church</span>
+					</div>
+				</a>
+				<a
+					href={resolve('/church/new')}
+					class="card bg-base-200 transition-colors hover:bg-base-300"
+				>
+					<div class="card-body items-center text-center">
+						<h2 class="card-title text-base">I lead a church</h2>
+						<p class="text-sm text-base-content/60">
+							Set up your church on GathUr, invite your team, and bring in your people.
+						</p>
+						<span class="btn mt-2 btn-outline btn-sm">Set up your church</span>
+					</div>
+				</a>
+			</div>
 		</section>
 	{:else}
 		<section>
@@ -160,7 +186,10 @@
 				</p>
 				<div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
 					{#each peopleYouMet as person (person.userId)}
-						<div class="card bg-base-200">
+						<a
+							href={resolve('/people/[userId]', { userId: person.userId })}
+							class="card bg-base-200 transition-colors hover:bg-base-300"
+						>
 							<div class="card-body flex-row items-center gap-3 p-4">
 								<div class="avatar">
 									{#if person.imageUrl}
@@ -176,12 +205,7 @@
 									{/if}
 								</div>
 								<div class="min-w-0">
-									<a
-										href={resolve('/people/[userId]', { userId: person.userId })}
-										class="block truncate font-semibold hover:text-primary"
-									>
-										{person.name}
-									</a>
+									<p class="truncate font-semibold">{person.name}</p>
 									<p class="truncate text-sm text-base-content/60">
 										{person.sharedCount > 1
 											? `${person.sharedCount} gatherings together`
@@ -189,7 +213,7 @@
 									</p>
 								</div>
 							</div>
-						</div>
+						</a>
 					{/each}
 				</div>
 			{/if}

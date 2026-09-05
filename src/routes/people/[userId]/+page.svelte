@@ -9,6 +9,7 @@
 	import IconSparkles from '@tabler/icons-svelte/icons/sparkles';
 	import IconUsersGroup from '@tabler/icons-svelte/icons/users-group';
 	import IconCalendarEvent from '@tabler/icons-svelte/icons/calendar-event';
+	import PageGhost from '$lib/components/PageGhost.svelte';
 
 	// A member's profile — everything they chose to share, plus the
 	// "why you may connect" reasons, so deciding to say hi is easy.
@@ -84,6 +85,17 @@
 	function formatDate(ts: number) {
 		return new Date(ts).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 	}
+
+	const roleLabels: Record<string, string> = { admin: 'Admin', staff: 'Staff', leader: 'Leader' };
+	const metaLine = $derived.by(() => {
+		if (!person) return '';
+		const parts: string[] = [];
+		if (person.lifeStage) parts.push(lifeStageLabels[person.lifeStage] ?? person.lifeStage);
+		if (person.role !== 'member') parts.push(roleLabels[person.role] ?? person.role);
+		if (person.ministry) parts.push(person.ministry);
+		parts.push(`Here since ${formatDate(person.joinedAt)}`);
+		return parts.join(' · ');
+	});
 </script>
 
 <svelte:head>
@@ -91,9 +103,7 @@
 </svelte:head>
 
 {#if auth.isLoading || profileQuery.isLoading}
-	<div class="flex justify-center py-24">
-		<span class="loading loading-lg loading-spinner text-primary"></span>
-	</div>
+	<PageGhost profile cards={2} />
 {:else if !person}
 	<section class="mx-auto max-w-md py-16 text-center">
 		<h1 class="font-display text-2xl font-bold text-primary">Profile not available</h1>
@@ -106,55 +116,43 @@
 	<section class="mx-auto max-w-2xl">
 		<a href={resolve('/people')} class="link text-sm text-base-content/60">← People</a>
 
-		<div class="mt-4 flex flex-wrap items-center gap-4">
+		<div class="mt-4 flex items-center gap-4">
 			{#if person.imageUrl}
-				<img src={person.imageUrl} alt="" class="size-20 rounded-full object-cover" />
+				<img src={person.imageUrl} alt="" class="size-20 shrink-0 rounded-full object-cover" />
 			{:else}
 				<div
-					class="flex size-20 items-center justify-center rounded-full bg-secondary text-secondary-content"
+					class="flex size-20 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-content"
 				>
 					<span class="text-3xl font-semibold">{person.name[0] ?? '?'}</span>
 				</div>
 			{/if}
-			<div class="min-w-0 flex-1">
+			<div class="min-w-0">
 				<h1 class="font-display text-3xl font-bold text-primary">{person.name}</h1>
-				<p class="mt-1 text-sm text-base-content/60">
-					{#if person.lifeStage}
-						{lifeStageLabels[person.lifeStage] ?? person.lifeStage} ·
-					{/if}
-					{person.role !== 'member' ? `${person.role} · ` : ''}
-					{#if person.ministry}
-						{person.ministry} ·
-					{/if}
-					here since {formatDate(person.joinedAt)}
-				</p>
+				<p class="mt-1 text-sm text-base-content/60">{metaLine}</p>
 				{#if person.email}
 					<p class="text-sm text-base-content/60">{person.email}</p>
 				{/if}
 			</div>
-			<div class="flex flex-wrap items-center gap-2">
-				{#if person.isSelf}
-					<a href={resolve('/onboarding')} class="btn btn-outline btn-sm">Edit my profile</a>
-				{:else if person.connection.status === 'connected'}
-					<span class="badge badge-success">Connected</span>
-					<button class="btn btn-primary btn-sm" disabled={busy} onclick={message}>Message</button>
-				{:else if person.connection.status === 'pending-outgoing'}
-					<span class="badge badge-ghost">Request pending</span>
-					<button class="btn btn-outline btn-sm" disabled={busy} onclick={message}>Message</button>
-				{:else if person.connection.status === 'pending-incoming'}
-					<div class="flex gap-2">
-						<button class="btn btn-primary btn-sm" disabled={busy} onclick={() => respond(true)}>
-							Accept
-						</button>
-						<button class="btn btn-ghost btn-sm" disabled={busy} onclick={() => respond(false)}>
-							Decline
-						</button>
-					</div>
-				{:else}
-					<button class="btn btn-primary" disabled={busy} onclick={connect}>Connect</button>
-					<button class="btn btn-outline btn-sm" disabled={busy} onclick={message}>Message</button>
-				{/if}
-			</div>
+		</div>
+		<div class="mt-4 flex flex-wrap items-center gap-2">
+			{#if person.isSelf}
+				<a href={resolve('/onboarding')} class="btn btn-outline btn-sm">Edit my profile</a>
+			{:else if person.connection.status === 'connected'}
+				<button class="btn btn-primary btn-sm" disabled={busy} onclick={message}>Message</button>
+			{:else if person.connection.status === 'pending-outgoing'}
+				<span class="badge badge-ghost">Request pending</span>
+				<button class="btn btn-outline btn-sm" disabled={busy} onclick={message}>Message</button>
+			{:else if person.connection.status === 'pending-incoming'}
+				<button class="btn btn-primary btn-sm" disabled={busy} onclick={() => respond(true)}>
+					Accept
+				</button>
+				<button class="btn btn-ghost btn-sm" disabled={busy} onclick={() => respond(false)}>
+					Decline
+				</button>
+			{:else}
+				<button class="btn btn-primary btn-sm" disabled={busy} onclick={connect}>Connect</button>
+				<button class="btn btn-outline btn-sm" disabled={busy} onclick={message}>Message</button>
+			{/if}
 		</div>
 
 		{#if person.reasons.length > 0}

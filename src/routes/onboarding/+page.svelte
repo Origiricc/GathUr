@@ -20,6 +20,7 @@
 	import IconCheck from '@tabler/icons-svelte/icons/check';
 	import IconSparkles from '@tabler/icons-svelte/icons/sparkles';
 	import type { Id } from '$convex/dataModel';
+	import PageGhost from '$lib/components/PageGhost.svelte';
 
 	const auth = useAuth();
 	const client = useConvexClient();
@@ -68,8 +69,7 @@
 	// ---- Step 1: join / invites ----
 	let search = $state('');
 	let joining = $state(false);
-	let showCreate = $state(false);
-	let newChurch = $state({ name: '', city: '', state: '' });
+	let showNotFound = $state(false);
 
 	// Team invites (leader/staff/admin) capture ministry + responsibilities.
 	let expandedInvite = $state<Id<'invitations'> | null>(null);
@@ -111,20 +111,6 @@
 		joining = true;
 		try {
 			await client.mutation(api.churches.join, { churchId });
-		} finally {
-			joining = false;
-		}
-	}
-
-	async function createChurch() {
-		if (!newChurch.name.trim()) return;
-		joining = true;
-		try {
-			await client.mutation(api.churches.create, {
-				name: newChurch.name,
-				city: newChurch.city || undefined,
-				state: newChurch.state || undefined
-			});
 		} finally {
 			joining = false;
 		}
@@ -233,9 +219,7 @@
 {/snippet}
 
 {#if auth.isLoading || (auth.isAuthenticated && myChurchQuery.isLoading)}
-	<div class="flex justify-center py-24">
-		<span class="loading loading-lg loading-spinner text-primary"></span>
-	</div>
+	<PageGhost centered cards={3} />
 {:else if !auth.isAuthenticated}
 	<section class="mx-auto max-w-md py-16 text-center">
 		<p class="text-base-content/70">Sign in to get started.</p>
@@ -345,42 +329,21 @@
 		</ul>
 
 		<div class="mt-6 text-center">
-			<button class="link text-primary" onclick={() => (showCreate = !showCreate)}>
+			<button class="link text-primary" onclick={() => (showNotFound = !showNotFound)}>
 				Can't find your church?
 			</button>
 		</div>
 
-		{#if showCreate}
+		{#if showNotFound}
 			<div class="card mt-4 bg-base-200">
 				<div class="card-body gap-3">
-					<h2 class="card-title text-base">Add your church</h2>
-					<input
-						class="input w-full"
-						placeholder="Church name"
-						bind:value={newChurch.name}
-						disabled={joining}
-					/>
-					<div class="flex gap-3">
-						<input
-							class="input w-full"
-							placeholder="City"
-							bind:value={newChurch.city}
-							disabled={joining}
-						/>
-						<input
-							class="input w-full"
-							placeholder="State"
-							bind:value={newChurch.state}
-							disabled={joining}
-						/>
-					</div>
-					<button
-						class="btn btn-primary"
-						disabled={joining || !newChurch.name.trim()}
-						onclick={createChurch}
-					>
-						{joining ? 'Creating…' : 'Create & join'}
-					</button>
+					<p class="text-sm text-base-content/70">
+						Your church may not be on GathUr yet, or hasn't shared its join link. Ask your church
+						team for an invite — or if you help lead your church, you can set it up yourself.
+					</p>
+					<a href={resolve('/church/new')} class="btn btn-outline btn-sm">
+						I lead my church — set it up on GathUr
+					</a>
 				</div>
 			</div>
 		{/if}
@@ -630,8 +593,19 @@
 								</span>
 							</div>
 						{:else if !recs}
-							<div class="mt-8 flex justify-center">
-								<span class="loading loading-spinner text-primary"></span>
+							<!-- Ghosts of the recommendation cards while matching runs -->
+							<div class="mt-8 space-y-3" aria-busy="true" aria-label="Loading" role="status">
+								{#each Array(3), i (i)}
+									<div class="card bg-base-200">
+										<div class="card-body flex-row items-center justify-between p-4">
+											<div class="min-w-0 flex-1 space-y-2">
+												<div class="h-4 w-40 max-w-full skeleton"></div>
+												<div class="h-3 w-56 max-w-full skeleton"></div>
+											</div>
+											<div class="h-8 w-20 skeleton rounded-full"></div>
+										</div>
+									</div>
+								{/each}
 							</div>
 						{:else}
 							<div class="mt-8 space-y-3">
